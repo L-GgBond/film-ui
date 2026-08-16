@@ -1,0 +1,20 @@
+# ===== Flutter / Dart =====
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+build/
+*.iml
+
+# ===== OS / editor =====
+.DS_Store
+.idea/
+.vscode/
+
+# ===== WorkBuddy 内部数据（含记忆/笔记，勿公开） =====
+.workbuddy/
+
+# ===== Local secrets / local config =====
+.env
+*.local

@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>影视台 · 预览原型</title>
+<style>
+  :root {
+    --bg: #0F1115; --surface: #181B21; --surface-alt: #22262E;
+    --accent: #5B8CFF; --text: #E8EAED; --text-2: #9AA0A6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg); color: var(--text); overflow: hidden;
+  }
+  .app { display: flex; flex: 1; min-height: 0; }
+
+  /* macOS desktop window chrome (preview only) */
+  body.desktop-mode { background: linear-gradient(135deg, #3a3f4b, #1d2026); }
+  .desktop-bg { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 22px; }
+  .mac-window { width: min(1280px, 96vw); height: min(820px, 92vh); background: var(--bg); border-radius: 12px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.55); display: flex; flex-direction: column; border: 1px solid rgba(255,255,255,.08); }
+  .mac-titlebar { height: 40px; background: #2a2e36; display: flex; align-items: center; padding: 0 14px; gap: 10px; flex-shrink: 0; border-bottom: 1px solid rgba(0,0,0,.3); }
+  .mac-lights { display: flex; gap: 8px; }
+  .mac-light { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; display: inline-block; }
+  .mac-light.red { background: #ff5f57; } .mac-light.yellow { background: #febc2e; } .mac-light.green { background: #28c840; }
+  .mac-title { color: #c8ccd2; font-size: 13px; margin-left: 8px; font-weight: 500; }
+  body:not(.desktop-mode) .desktop-bg { padding: 0; display: block; }
+  body:not(.desktop-mode) .mac-window { width: 100%; height: 100vh; border-radius: 0; box-shadow: none; border: none; }
+  body:not(.desktop-mode) .mac-titlebar { display: none; }
+  .mode-toggle, .restore-btn { position: fixed; right: 16px; bottom: 16px; z-index: 90; background: var(--surface-alt); color: var(--text); border: 1px solid rgba(255,255,255,.1); border-radius: 20px; padding: 8px 14px; font-size: 13px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+  .restore-btn { display: none; }
+
+  .sidebar { width: 210px; background: var(--surface); display: flex; flex-direction: column; flex-shrink: 0; border-right: 1px solid var(--surface-alt); transition: width .2s; }
+  .logo { height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 16px; font-size: 16px; font-weight: 500; }
+  .logo .mark { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
+  .nav, .sources { padding: 4px 8px; flex: 1; overflow-y: auto; }
+  .section-title { color: var(--text-2); font-size: 12px; padding: 14px 8px 4px; }
+  .tile { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: var(--text-2); font-size: 14px; margin: 2px 0; }
+  .tile:hover { background: rgba(255,255,255,.04); }
+  .tile.active { background: rgba(91,140,255,.16); color: var(--text); }
+  .tile.active .ico { color: var(--accent); }
+  .ico { font-size: 18px; width: 20px; text-align: center; }
+
+  .content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar { height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--surface-alt); }
+  .tabs { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; border-radius: 8px; cursor: pointer; color: var(--text-2); font-size: 14px; background: transparent; border: none; }
+  .tab.active { background: rgba(91,140,255,.16); color: var(--accent); }
+  .search { width: 260px; height: 38px; background: var(--surface-alt); border-radius: 8px; border: none; color: var(--text); padding: 0 12px 0 36px; font-size: 14px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239AA0A6' stroke-width='2'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>");
+    background-repeat: no-repeat; background-position: 12px center; }
+  .search:focus { outline: 1px solid var(--accent); }
+  .src-pill { font-size: 12px; color: var(--text-2); padding: 4px 10px; border-radius: 6px; background: var(--surface-alt); margin-left: 8px; }
+
+  .feed { flex: 1; overflow-y: auto; }
+  .grid { padding: 16px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .view { display: none; flex: 1; flex-direction: column; }
+  .view.show { display: flex; }
+  .placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-2); text-align: center; padding: 40px; }
+  .placeholder .ph-ico { font-size: 48px; margin-bottom: 16px; opacity: .6; }
+  .placeholder .ph-title { font-size: 18px; color: var(--text); margin-bottom: 8px; }
+  .placeholder .ph-desc { font-size: 13px; line-height: 1.6; max-width: 320px; }
+
+  /* Sub pages: parse / clip */
+  .subpage { flex: 1; overflow-y: auto; padding: 20px; max-width: 880px; width: 100%; margin: 0 auto; }
+  .subpage-head { font-size: 18px; color: var(--text); font-weight: 600; margin-bottom: 14px; }
+  .parse-note { font-size: 12px; color: var(--text-2); background: var(--surface-alt); padding: 10px 12px; border-radius: 8px; line-height: 1.6; margin-bottom: 16px; }
+  .parse-result { margin-top: 16px; }
+  .pr-title { font-size: 13px; color: var(--text); margin: 12px 0 6px; }
+  .pr-code { background: #0c0d10; border: 1px solid var(--surface-alt); border-radius: 8px; padding: 12px; font-size: 12px; color: #9fe0a0; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, Menlo, monospace; }
+  .pr-warn { font-size: 11px; color: #e0a0a0; margin-top: 10px; line-height: 1.6; }
+  .waterfall { columns: 4 160px; column-gap: 12px; }
+  .clip-card { break-inside: avoid; margin-bottom: 12px; cursor: pointer; }
+  .clip-cover { position: relative; border-radius: 10px; overflow: hidden; background: #222; aspect-ratio: 9/16; background-size: cover; background-position: center; }
+  .clip-dur { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+  .clip-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 34px; height: 34px; border-radius: 50%; background: rgba(91,140,255,.9); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; }
+  .clip-title { font-size: 13px; color: var(--text); margin-top: 6px; }
+  .clip-meta { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+
+  /* Featured banner carousel */
+  .featured { padding: 16px 16px 4px; }
+  .featured-title { font-size: 14px; color: var(--text-2); margin: 0 0 10px 2px; }
+  .featured-track { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
+  .featured-track::-webkit-scrollbar { height: 6px; }
+  .featured-track::-webkit-scrollbar-thumb { background: var(--surface-alt); border-radius: 3px; }
+  .feat-card { position: relative; flex: 0 0 320px; height: 150px; border-radius: 12px; overflow: hidden; cursor: pointer; scroll-snap-align: start; box-shadow: 0 6px 18px rgba(0,0,0,.3); }
+  .feat-card .fc-bg { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .feat-card .fc-mask { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.05) 30%, rgba(0,0,0,.78) 100%); }
+  .feat-card .fc-info { position: absolute; left: 14px; right: 14px; bottom: 12px; }
+  .feat-card .fc-title { font-size: 17px; font-weight: 600; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feat-card .fc-sub { font-size: 12px; color: #d8dbe0; margin-top: 4px; }
+  .feat-card .fc-play { position: absolute; top: 12px; right: 12px; width: 38px; height: 38px; border-radius: 50%; background: rgba(91,140,255,.92); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
+
+  /* Detail related recommendations */
+  .detail-recs { padding: 8px 20px 12px; }
+  .recs-title { font-size: 16px; color: var(--text); font-weight: 600; margin-bottom: 12px; }
+  .recs-track { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
+  .recs-track::-webkit-scrollbar { height: 6px; }
+  .recs-track::-webkit-scrollbar-thumb { background: var(--surface-alt); border-radius: 3px; }
+  .rec-card { flex: 0 0 116px; cursor: pointer; scroll-snap-align: start; }
+  .rec-cover { position: relative; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; background: #222; margin-bottom: 6px; }
+  .rec-cover .rec-bg { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .rec-card .rc-title { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rec-card .rc-sub { font-size: 11px; color: var(--text-2); }
+  .card { background: var(--surface); border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform .15s; display: flex; flex-direction: column; }
+  .card:hover { transform: translateY(-4px); }
+  .cover { position: relative; aspect-ratio: 2/3; overflow: hidden; background: #222; }
+  .poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .poster-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 14px; text-align: center; }
+  .pf-ico { font-size: 42px; opacity: .35; filter: drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
+  .play-badge { position: absolute; right: 8px; bottom: 8px; background: rgba(0,0,0,.5); color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 10px; }
+  .meta { padding: 8px; flex: 1; }
+  .title { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ov { font-size: 11px; color: var(--text-2); margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
+  .badge { display: inline-block; margin-top: 6px; padding: 2px 6px; border-radius: 4px; font-size: 11px; color: var(--accent); background: rgba(91,140,255,.16); }
+  .empty { color: var(--text-2); padding: 40px; text-align: center; grid-column: 1/-1; }
+
+  /* Player - full screen page (not a modal) */
+  .player-page { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 200; }
+  .player-page.show { display: flex; }
+  .player-top { position: relative; height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #0c0d10; flex-shrink: 0; }
+  .player-top .back { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; line-height: 1; padding: 4px; }
+  .player-top .pt { font-size: 16px; color: #fff; font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .src-label { color: #c8ccd2; font-size: 12px; }
+  .player-btn { background: #262a33; color: #fff; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .player-btn:hover { background: #323744; }
+  .player-line-menu, .player-speed-menu { position: absolute; top: 50px; right: 12px; background: #1a1d23; border: 1px solid #2c313a; border-radius: 8px; padding: 6px; min-width: 150px; z-index: 210; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .player-line-menu .lm-item, .player-speed-menu .sm-item { display: block; width: 100%; text-align: left; background: none; border: none; color: #e8eaed; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .player-line-menu .lm-item:hover, .player-speed-menu .sm-item:hover { background: #262a33; }
+  .player-line-menu .lm-item.active, .player-speed-menu .sm-item.active { color: var(--accent); }
+  .player-drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 300px; max-width: 82vw; background: #0c0d10; border-left: 1px solid #2c313a; transform: translateX(100%); transition: transform .2s; z-index: 205; display: flex; flex-direction: column; }
+  .player-drawer.show { transform: translateX(0); }
+  .player-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #2c313a; }
+  .player-drawer-head .pd-title { color: #fff; font-size: 15px; font-weight: 600; }
+  .player-drawer-list { flex: 1; overflow-y: auto; padding: 12px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .player-drawer-list .ep { background: #262a33; color: #fff; border: none; padding: 12px 0; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .player-drawer-list .ep:hover { background: var(--accent); }
+  .player-drawer-list .ep.active { background: var(--accent); }
+  .player-spinner { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.4); z-index: 208; }
+  .player-spinner.show { display: flex; }
+  .player-spinner .ring { width: 42px; height: 42px; border: 4px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .player-stage { flex: 1; display: flex; align-items: center; justify-content: center; background: #000; padding: 12px; min-height: 0; }
+  .player-stage video { width: 100%; max-width: 1100px; max-height: 100%; background: #000; border-radius: 8px; }
+  .close { cursor: pointer; color: var(--text-2); font-size: 20px; border: none; background: none; }
+
+  /* Detail page - full screen (not a modal) */
+  .detail { position: fixed; inset: 0; background: var(--bg); display: none; flex-direction: column; z-index: 100; overflow-y: auto; }
+  .detail.show { display: flex; }
+  .detail-top { height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--surface-alt); position: sticky; top: 0; background: var(--bg); z-index: 2; flex-shrink: 0; }
+  .detail-top .back { background: none; border: none; color: var(--text); font-size: 22px; cursor: pointer; line-height: 1; }
+  .detail-top .dt-title { font-size: 16px; color: var(--text); font-weight: 500; }
+  .detail-box { max-width: 1000px; width: 100%; margin: 0 auto; padding-bottom: 36px; }
+  .detail-hero { display: flex; gap: 22px; padding: 28px 20px; background: linear-gradient(135deg, #20242c, #15181e); }
+  .detail-poster { width: 150px; height: 225px; border-radius: 12px; flex-shrink: 0; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 34px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  .detail-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+  .dm-title { font-size: 24px; font-weight: 600; color: var(--text); }
+  .dm-badge { align-self: flex-start; padding: 4px 12px; border-radius: 6px; font-size: 12px; color: var(--accent); background: rgba(91,140,255,.16); }
+  .dm-ov { color: var(--text-2); font-size: 13px; line-height: 1.8; }
+  .dm-play { align-self: flex-start; background: var(--accent); border: none; color: #fff; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 4px; }
+  .detail-eps-title { padding: 20px 20px 6px; font-size: 16px; color: var(--text); font-weight: 600; }
+  .detail-eps { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; padding: 12px 20px 24px; }
+  .ep-btn { background: var(--surface-alt); border: none; color: var(--text); padding: 11px 0; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .ep-btn:hover { background: var(--accent); color: #fff; }
+
+  /* Settings modal - macOS-like dialog */
+  .settings { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 60; }
+  .settings.show { display: flex; }
+  .settings-box { width: min(520px, 94vw); max-height: 86vh; overflow-y: auto; background: var(--surface); border-radius: 14px; padding: 0; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+  .settings-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 10px; }
+  .settings-head h3 { font-size: 16px; font-weight: 600; color: var(--text); margin: 0; }
+  .settings-body { padding: 0 20px 20px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--text); margin-bottom: 6px; }
+  .field label.required::before { content: '* '; color: #ff4d4f; }
+  .field input, .field select {
+    width: 100%; height: 36px; background: var(--surface-alt); border: 1px solid transparent;
+    border-radius: 8px; color: var(--text); padding: 0 12px; font-size: 13px; outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field .hint { font-size: 11px; color: var(--text-2); margin-top: 6px; line-height: 1.5; }
+  .field .hint a { color: var(--accent); }
+  .field .error { font-size: 11px; color: #ff4d4f; margin-top: 4px; }
+
+  .src-edit { border: 1px solid var(--surface-alt); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .src-edit .src-name { width: 100%; height: 34px; background: var(--surface-alt); border: 1px solid transparent; border-radius: 8px; color: var(--text); padding: 0 10px; font-size: 13px; margin-bottom: 10px; outline: none; }
+  .src-edit .src-name:focus { border-color: var(--accent); }
+  .src-edit .src-field { width: 100%; height: 34px; background: var(--surface-alt); border: 1px solid transparent; border-radius: 8px; color: var(--text); padding: 0 10px; font-size: 13px; margin-bottom: 10px; outline: none; }
+  .src-edit .src-field:focus { border-color: var(--accent); }
+  .form-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .form-row.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-label { font-size: 12px; color: var(--text); }
+  .form-label.required::before { content: '* '; color: #ff4d4f; }
+  .radio-row { gap: 16px; }
+  .radio-label { font-size: 13px; color: var(--text); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .radio-label input { accent-color: var(--accent); width: 14px; height: 14px; }
+  .url-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .url-row input { flex: 1; height: 32px; background: var(--surface-alt); border: none; border-radius: 6px; color: var(--text); padding: 0 10px; font-size: 12px; }
+  .url-row button { background: transparent; border: 1px solid var(--surface-alt); color: var(--text-2); border-radius: 6px; width: 32px; cursor: pointer; }
+  .mini-btn { background: var(--surface-alt); border: none; color: var(--text); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-top: 4px; }
+  .del-src { background: transparent; border: 1px solid #5a2a2a; color: #e08; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  .actions { display: flex; gap: 10px; justify-content: flex-end; padding: 0 20px 20px; }
+  .btn-primary { background: var(--accent); border: none; color: #fff; padding: 9px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .btn-ghost { background: var(--surface-alt); border: none; color: var(--text); padding: 9px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .select-field { width: 100%; height: 34px; background: var(--surface-alt); border: 1px solid transparent; border-radius: 8px; color: var(--text); padding: 0 10px; font-size: 13px; outline: none; }
+
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2c313a; color: var(--text); padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 80; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 720px) {
+    .sidebar { width: 64px; }
+    .logo span, .tile span, .section-title { display: none; }
+    .tile { justify-content: center; }
+  }
+
+  /* ===== Admin / 用户管理 ===== */
+  .admin-note { background: rgba(91,140,255,.08); border: 1px solid rgba(91,140,255,.25); color: var(--text-2); font-size: 13px; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; line-height: 1.6; }
+  .admin-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .admin-stat { background: var(--surface); border: 1px solid var(--surface-alt); border-radius: 10px; padding: 14px 16px; }
+  .admin-stat .num { font-size: 26px; font-weight: 600; }
+  .admin-stat .lbl { color: var(--text-2); font-size: 12px; margin-top: 4px; }
+  .admin-stat.warn .num { color: #ff8a65; }
+  .admin-stat.ok .num { color: #4db6ac; }
+  .admin-stat.info .num { color: var(--accent); }
+  .admin-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .admin-search { flex: 1; min-width: 200px; height: 36px; background: var(--surface-alt); border: none; border-radius: 8px; color: var(--text); padding: 0 12px; font-size: 13px; outline: none; }
+  .admin-search:focus { outline: 1px solid var(--accent); }
+  .admin-toolbar .select-field { width: auto; min-width: 110px; }
+  .admin-count { color: var(--text-2); font-size: 12px; margin-left: auto; }
+  .admin-table-wrap { background: var(--surface); border: 1px solid var(--surface-alt); border-radius: 10px; overflow: auto; max-height: calc(100vh - 340px); }
+  .admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .admin-table th { text-align: left; color: var(--text-2); font-weight: 500; padding: 12px 14px; border-bottom: 1px solid var(--surface-alt); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  .admin-table td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
+  .admin-table tr:hover td { background: rgba(255,255,255,.03); }
+  .ta-right { text-align: right; }
+  .u-cell { display: flex; align-items: center; gap: 10px; }
+  .u-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 600; flex-shrink: 0; }
+  .u-name { font-size: 13px; }
+  .u-email { color: var(--text-2); font-size: 11px; }
+  .role-badge, .status-badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 12px; }
+  .role-user { background: rgba(154,160,166,.18); color: #c4c9cf; }
+  .role-vip { background: rgba(255,193,7,.16); color: #ffd54f; }
+  .role-admin { background: rgba(91,140,255,.18); color: #8fb0ff; }
+  .status-active { background: rgba(77,182,172,.16); color: #4db6ac; }
+  .status-disabled { background: rgba(255,138,101,.16); color: #ff8a65; }
+  .admin-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .mini-btn { background: var(--surface-alt); border: 1px solid rgba(255,255,255,.08); color: var(--text); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .mini-btn:hover { background: rgba(255,255,255,.08); }
+  .mini-btn.danger { color: #ff8a65; border-color: rgba(255,138,101,.35); }
+  .mini-btn.ok { color: #4db6ac; border-color: rgba(77,182,172,.35); }
+  .admin-role-select { height: 28px; background: var(--surface-alt); border: 1px solid rgba(255,255,255,.08); border-radius: 6px; color: var(--text); font-size: 12px; padding: 0 6px; }
+
+  .admin-detail { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 70; }
+  .admin-detail.show { display: flex; }
+  .admin-detail-box { width: min(460px, 92vw); background: var(--surface); border: 1px solid var(--surface-alt); border-radius: 12px; padding: 20px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  .admin-detail-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .admin-detail-avatar { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; font-weight: 600; flex-shrink: 0; }
+  .admin-detail-name { font-size: 17px; font-weight: 600; }
+  .admin-detail-email { color: var(--text-2); font-size: 13px; margin-top: 2px; }
+  .admin-detail-body { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; font-size: 13px; }
+  .admin-detail-body .k { color: var(--text-2); font-size: 12px; }
+  .admin-detail-body .v { margin-top: 2px; }
+  .admin-detail .actions { margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px; }
+  @media (max-width: 720px) {
+    .admin-stats { grid-template-columns: repeat(2, 1fr); }
+    .admin-detail-body { grid-template-columns: 1fr; }
+  }
+
+  /* Login gate */
+  .login-overlay { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1b1e24, #0e1014); }
+  .login-overlay.hide { display: none; }
+  .login-card { width: min(360px, 90vw); background: var(--surface); border: 1px solid var(--surface-alt); border-radius: 16px; padding: 30px 28px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  .login-logo { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .login-logo .mark { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; }
+  .login-sub { color: var(--text-2); font-size: 13px; margin-bottom: 22px; }
+  .login-field { margin-bottom: 14px; }
+  .login-field label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+  .login-field input { width: 100%; height: 42px; background: var(--surface-alt); border: 1px solid rgba(255,255,255,.08); border-radius: 9px; color: var(--text); padding: 0 14px; font-size: 14px; box-sizing: border-box; outline: none; }
+  .login-field input:focus { outline: 1px solid var(--accent); }
+  .login-btn { width: 100%; height: 44px; background: var(--accent); color: #fff; border: none; border-radius: 9px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+  .login-btn:hover { filter: brightness(1.08); }
+  .login-err { color: #ff8a65; font-size: 12px; min-height: 16px; margin-top: -4px; margin-bottom: 8px; }
+  .login-hint { margin-top: 14px; text-align: center; color: var(--text-2); font-size: 12px; }
+  .login-hint b { color: var(--text); }
+</style>
+</head>
+<body class="desktop-mode">
+<div class="desktop-bg">
+  <div class="mac-window" id="macWin">
+    <div class="mac-titlebar">
+      <div class="mac-lights">
+        <span class="mac-light red" onclick="closeWin()" title="关闭"></span>
+        <span class="mac-light yellow" onclick="closeWin()" title="最小化"></span>
+        <span class="mac-light green" onclick="toast('已是最新版本')" title="缩放"></span>
+      </div>
+      <div class="mac-title">影视台</div>
+    </div>
+    <div class="app">
+  <aside class="sidebar">
+    <div class="logo"><div class="mark">▶</div><span>影视台</span></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="section-title">资源源（可配置）</div>
+    <div class="sources" id="sources"></div>
+  </aside>
+  <main class="content">
+    <div class="topbar">
+      <div class="tabs" id="tabs"></div>
+      <span class="src-pill" id="modePill">加载中…</span>
+      <input class="search" id="search" placeholder="搜索影片、剧集..." />
+    </div>
+    <div class="feed view show" id="gridView">
+      <div class="featured">
+        <div class="featured-title">🔥 精选推荐</div>
+        <div class="featured-track" id="featured"></div>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="view" id="parseView">
+      <div class="subpage">
+        <div class="subpage-head">🔗 解析接口</div>
+        <div class="parse-note">本页仅做「请求构造」与 UI 演示，<b>不实际拉取版权内容</b>。请在「设置 → 资源源配置」中填写你<b>自有/已授权</b>的接口地址（endpoint 字段），即可在此构造解析请求。</div>
+        <div class="field">
+          <label>选择解析源</label>
+          <select id="parseSrc" class="select-field"></select>
+        </div>
+        <div class="field">
+          <label>视频地址 / 分享链接</label>
+          <input id="parseInput" class="src-field" placeholder="粘贴视频链接，如 https://example.com/video/123" />
+        </div>
+        <button class="btn-primary" onclick="buildParse()">构造请求</button>
+        <div id="parseResult" class="parse-result" style="display:none"></div>
+      </div>
+    </div>
+    <div class="view" id="clipView">
+      <div class="subpage">
+        <div class="subpage-head">✂️ 过刻剪辑</div>
+        <div class="waterfall" id="clipWaterfall"></div>
+      </div>
+    </div>
+    <div class="view" id="adminView">
+      <div class="subpage">
+        <div class="subpage-head">👥 用户管理</div>
+        <div class="admin-note">本站为 UI 原型演示，下列为 <b>mock 用户数据</b>。可查看用户明细、调整角色权限、生成临时密码、启用 / 禁用账号。</div>
+        <div class="admin-stats" id="adminStats"></div>
+        <div class="admin-toolbar">
+          <input class="admin-search" id="adminSearch" placeholder="搜索用户名 / 邮箱 / IP" />
+          <select class="select-field" id="adminRoleFilter" onchange="renderAdmin()">
+            <option value="">全部角色</option>
+            <option value="user">普通用户</option>
+            <option value="vip">会员</option>
+            <option value="admin">管理员</option>
+          </select>
+          <select class="select-field" id="adminStatusFilter" onchange="renderAdmin()">
+            <option value="">全部状态</option>
+            <option value="active">已启用</option>
+            <option value="disabled">已禁用</option>
+          </select>
+          <span class="admin-count" id="adminCount"></span>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>用户</th><th>角色</th><th>状态</th><th>最近活跃</th><th>注册时间</th><th class="ta-right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="adminRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Player (full screen page) -->
+<div class="player-page" id="overlay">
+  <div class="player-top">
+    <button class="back" onclick="closePlayer()">‹</button>
+    <div class="pt" id="playerTitle"></div>
+    <div class="player-actions">
+      <span class="src-label" id="srcLabel"></span>
+      <button class="player-btn" id="lineBtn" onclick="toggleLineMenu()">线路 ▾</button>
+      <button class="player-btn" id="speedBtn" onclick="toggleSpeedMenu()">1.0x</button>
+      <button class="player-btn" id="nextBtn" onclick="nextEpisode()" style="display:none">下一集 ▶</button>
+      <button class="player-btn" id="epBtn" onclick="toggleDrawer()" style="display:none">选集</button>
+    </div>
+    <div class="player-line-menu" id="lineMenu" style="display:none"></div>
+    <div class="player-speed-menu" id="speedMenu" style="display:none"></div>
+  </div>
+  <div class="player-stage">
+    <video id="player" controls playsinline></video>
+  </div>
+  <div class="player-spinner" id="playerSpinner"><div class="ring"></div></div>
+  <div class="player-drawer" id="epDrawer">
+    <div class="player-drawer-head">
+      <div class="pd-title">选集</div>
+      <button class="back" onclick="toggleDrawer()">✕</button>
+    </div>
+    <div class="player-drawer-list" id="epList"></div>
+  </div>
+</div>
+
+<!-- Detail (full screen page) -->
+<div class="detail" id="detail">
+  <div class="detail-top">
+    <button class="back" onclick="closeDetail()">‹</button>
+    <div class="dt-title" id="detailTopTitle"></div>
+  </div>
+  <div class="detail-box">
+    <div class="detail-hero">
+      <div class="detail-poster" id="detailPoster"></div>
+      <div class="detail-meta">
+        <div class="dm-title" id="detailTitle"></div>
+        <span class="dm-badge" id="detailStatus"></span>
+        <div class="dm-ov" id="detailOv"></div>
+        <button class="dm-play" onclick="playFromDetail()">▶ 立即播放</button>
+      </div>
+    </div>
+    <div class="detail-eps-title" id="detailEpsTitle"></div>
+    <div class="detail-eps" id="detailEps"></div>
+    <div class="detail-recs">
+      <div class="recs-title">相关推荐</div>
+      <div class="recs-track" id="detailRecs"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="settings" id="settings" onclick="if(event.target===this)closeSettings()">
+    <div class="settings-box">
+      <div class="settings-head">
+        <h3>编辑</h3>
+        <button class="close" onclick="closeSettings()">✕</button>
+      </div>
+      <div class="settings-body">
+        <div class="field">
+          <label>TMDB API Key</label>
+          <input id="tmdbKey" placeholder="在 themoviedb.org 免费注册后获取 v3 API Key" />
+          <div class="hint">仅拉取影片元数据（海报/简介/分类），不涉及视频流。留空则使用本地 mock 数据。</div>
+        </div>
+        <div class="field">
+          <label>资源源配置</label>
+          <div id="srcEditor"></div>
+          <button class="mini-btn" onclick="addSource()">+ 添加资源源</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-ghost" onclick="closeSettings()">取消</button>
+        <button class="btn-primary" onclick="saveSettings()">确定</button>
+      </div>
+    </div>
+</div>
+
+<!-- User detail (admin) -->
+<div class="admin-detail" id="adminDetail" onclick="if(event.target===this)closeAdminDetail()">
+  <div class="admin-detail-box">
+    <div class="admin-detail-head">
+      <div class="admin-detail-avatar" id="adAvatar"></div>
+      <div class="admin-detail-id">
+        <div class="admin-detail-name" id="adName"></div>
+        <div class="admin-detail-email" id="adEmail"></div>
+      </div>
+      <button class="close" onclick="closeAdminDetail()">✕</button>
+    </div>
+    <div class="admin-detail-body" id="adBody"></div>
+    <div class="actions">
+      <button class="btn-ghost" onclick="closeAdminDetail()">关闭</button>
+      <button class="btn-primary" onclick="genPassword(adCurrent)">生成临时密码</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<button class="mode-toggle" id="modeToggle" onclick="toggleMode()">🖥 全屏预览</button>
+
+<!-- Login gate -->
+<div class="login-overlay hide" id="loginOverlay">
+  <div class="login-card">
+    <div class="login-logo"><div class="mark">▶</div><span>影视台</span></div>
+    <div class="login-sub">登录后可访问「用户管理」等后台功能</div>
+    <div class="login-field">
+      <label>用户名</label>
+      <input id="loginUser" placeholder="admin" autocomplete="username" />
+    </div>
+    <div class="login-field">
+      <label>密码</label>
+      <input id="loginPass" type="password" placeholder="••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+    </div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="login-btn" onclick="doLogin()">登录</button>
+    <div class="login-hint">演示账号 <b>admin</b> / 密码 <b>admin123</b></div>
+  </div>
+</div>
+
+</div><!-- /.mac-window -->
+</div><!-- /.desktop-bg -->
+
+<script>
+  // 合法公开授权测试视频源（开源/CC，非版权影视）。作为播放兜底线路。
+  const sourcePool = [
+    'https://media.w3.org/2010/05/sintel/trailer.mp4',
+    'https://www.w3schools.com/html/mov_bbb.mp4',
+    'https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4',
+    'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4',
+    'https://test-videos.co.uk/vids/elephantsdream/mp4/h264/360/ElephantsDream_360_10s_1MB.mp4',
+    'https://test-videos.co.uk/vids/jellyfish/mp4/h264/360/Jellyfish_360_10s_1MB.mp4',
+    'https://test-videos.co.uk/vids/sintel/mp4/h264/360/Sintel_360_10s_1MB.mp4',
+    'https://media.w3.org/2010/05/bunny/movie.mp4',
+    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  ];
+
+  // 真实且可达的开放授权（CC-BY）电影海报，来自 Blender 开源电影官方 CDN。
+  // 作为默认封面（无 TMDB key 时）；加载失败自动回落渐变占位。
+  const POSTER_POOL = [
+    'https://cloud.blender.org/static/films/big-buck-bunny/poster.jpg',
+    'https://cloud.blender.org/static/films/sintel/poster.jpg',
+    'https://cloud.blender.org/static/films/elephants-dream/poster.jpg',
+    'https://cloud.blender.org/static/films/tears-of-steel/poster.jpg',
+    'https://cloud.blender.org/static/films/cosmos-laundromat/poster.jpg',
+    'https://cloud.blender.org/static/films/caminandes/poster.jpg',
+    'https://cloud.blender.org/static/films/agent-327/poster.jpg',
+    'https://cloud.blender.org/static/films/wing-it/poster.jpg',
+    'https://cloud.blender.org/static/films/coffee-run/poster.jpg',
+    'https://cloud.blender.org/static/films/sprite-fright/poster.jpg',
+  ];
+
+  const defaultSources = [
+    { name: '量子资源', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://media.w3.org/2010/05/sintel/trailer.mp4'] },
+    { name: '非凡资源', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://www.w3schools.com/html/mov_bbb.mp4'] },
+    { name: '明帝影视', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4'] },
+    { name: '雷电影视', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4'] },
+    { name: '本地资源', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://test-videos.co.uk/vids/elephantsdream/mp4/h264/360/ElephantsDream_360_10s_1MB.mp4'] },
+    { name: '星辰影视', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://test-videos.co.uk/vids/jellyfish/mp4/h264/360/Jellyfish_360_10s_1MB.mp4'] },
+    { name: '极光资源', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://test-videos.co.uk/vids/sintel/mp4/h264/360/Sintel_360_10s_1MB.mp4'] },
+    { name: '全网搜', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://media.w3.org/2010/05/bunny/movie.mp4'] },
+    { name: '云端解析', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: ['https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'] },
+  ];
+
+  const navItems = [
+    { id: 'movie', label: '影视', icon: '🎬' },
+    { id: 'tv', label: '电视', icon: '📺' },
+    { id: 'parse', label: '解析', icon: '🔗' },
+    { id: 'clip', label: '过刻', icon: '✂️' },
+    { id: 'admin', label: '用户管理', icon: '👥' },
+    { id: 'settings', label: '设置', icon: '⚙️' },
+  ];
+  const categories = ['最新', '电影片', '连续剧', '动漫', '综艺', '纪录片', '更多'];
+  const catMap = { '最新': null, '电影片': 'movie', '连续剧': 'tv', '动漫': 'anime', '综艺': 'variety', '纪录片': 'doc', '更多': null };
+
+  // Mock 兜底数据（无 TMDB key 时使用）
+  const mockBase = [
+    [1,'星际穿越者','latest','更新至08集','#3F51B5'],
+    [2,'山海秘闻录','latest','全24集','#00897B'],
+    [3,'暗夜追凶','movie','HD高清','#E64A19'],
+    [4,'云端之城','movie','HD高清','#455A64'],
+    [5,'荣耀时代','tv','更新至32集','#7B1FA2'],
+    [6,'风起陇西','tv','更新至12集','#388E3C'],
+    [7,'深海回声','movie','HD高清','#00ACC1'],
+    [8,'岁月神偷','latest','全10集','#FFA000'],
+    [9,'量子恋人','tv','更新至05集','#C2185B'],
+    [10,'北境往事','movie','HD高清','#5D4037'],
+    [11,'光弧计划','latest','更新至20集','#0288D1'],
+    [12,'寂静海岸','tv','全30集','#1976D2'],
+    [13,'明日边境','latest','更新至03集','#00838F'],
+    [14,'雾山谜案','latest','全08集','#6A1B9A'],
+    [15,'拾光记','latest','更新至15集','#AD1457'],
+    [16,'破晓时分','latest','全06集','#5E35B1'],
+    [17,'星际尘埃','movie','HD高清','#37474F'],
+    [18,'红日','movie','HD高清','#D84315'],
+    [19,'寒鸦之刃','movie','HD高清','#BF360C'],
+    [20,'银翼编年','movie','HD高清','#263238'],
+    [21,'长安十二时辰','tv','更新至40集','#2E7D32'],
+    [22,'琅琊榜风云','tv','全54集','#558B2F'],
+    [23,'庆余年外传','tv','更新至22集','#33691E'],
+    [24,'鹤唳华亭','tv','全60集','#1B5E20'],
+    [25,'灵笼','anime','更新至12集','#1565C0'],
+    [26,'刺客伍六七','anime','全20集','#0D47A1'],
+    [27,'镇魂街','anime','更新至24集','#2962FF'],
+    [28,'画江湖之不良人','anime','全40集','#303F9F'],
+    [29,'狐妖小红娘','anime','更新至36集','#1976D2'],
+    [30,'一人之下','anime','全30集','#0288D1'],
+    [31,'奔跑吧','variety','更新至12期','#F9A825'],
+    [32,'极限挑战','variety','全10期','#F57F17'],
+    [33,'歌手2026','variety','更新至08期','#FF6F00'],
+    [34,'喜剧之王单口季','variety','全14期','#E65100'],
+    [35,'地球脉动','doc','全6集','#00796B'],
+    [36,'蓝色星球','doc','全7集','#0097A7'],
+    [37,'人类星球','doc','全8集','#00838F'],
+    [38,'河西走廊','doc','全10集','#00695C'],
+  ];
+
+  // ---- Mock 用户数据（用户管理页演示用，非真实数据） ----
+  const MOCK_USERS = [
+    { id: 1, name: '影迷小王', email: 'xiaowang@example.com', role: 'user', status: 'active', reg: '2025-11-03', last: '2026-08-16 09:12', logins: 142, ip: '116.22.31.8', device: 'iPhone 15 Pro', region: '广东·深圳', plan: '免费' },
+    { id: 2, name: '追剧狂魔', email: 'zhuiju@example.com', role: 'vip', status: 'active', reg: '2025-09-18', last: '2026-08-16 08:40', logins: 530, ip: '223.104.5.22', device: 'iPad Air', region: '浙江·杭州', plan: '连续剧会员' },
+    { id: 3, name: '夜猫子', email: 'nightowl@example.com', role: 'user', status: 'active', reg: '2026-01-22', last: '2026-08-15 23:51', logins: 88, ip: '112.10.99.3', device: 'Android · 小米14', region: '四川·成都', plan: '免费' },
+    { id: 4, name: '阿May', email: 'amay@example.com', role: 'user', status: 'disabled', reg: '2025-12-01', last: '2026-07-30 14:20', logins: 36, ip: '120.85.11.7', device: 'MacBook Pro', region: '上海·浦东', plan: '免费' },
+    { id: 5, name: '电影老饕', email: 'cinephile@example.com', role: 'vip', status: 'active', reg: '2025-06-09', last: '2026-08-16 07:05', logins: 911, ip: '36.45.2.19', device: 'Windows PC', region: '北京·朝阳', plan: '全站会员' },
+    { id: 6, name: 'tech_admin', email: 'admin@shipin.tai', role: 'admin', status: 'active', reg: '2025-01-01', last: '2026-08-16 10:30', logins: 2048, ip: '内网 10.0.0.9', device: '管理后台', region: '本地·运维', plan: '管理员' },
+    { id: 7, name: '小鹿乱撞', email: 'deer@example.com', role: 'user', status: 'active', reg: '2026-03-15', last: '2026-08-14 21:10', logins: 64, ip: '117.136.40.5', device: 'iPhone 14', region: '江苏·南京', plan: '免费' },
+    { id: 8, name: '刷剧不睡', email: 'nosleep@example.com', role: 'user', status: 'disabled', reg: '2026-02-02', last: '2026-06-12 02:33', logins: 27, ip: '183.14.8.66', device: 'Android · 一加12', region: '湖北·武汉', plan: '免费' },
+    { id: 9, name: 'VIP会员Lee', email: 'lee@example.com', role: 'vip', status: 'active', reg: '2025-10-10', last: '2026-08-15 19:45', logins: 377, ip: '101.88.23.4', device: 'Apple TV', region: '福建·厦门', plan: '全站会员' },
+    { id: 10, name: '路人甲', email: '路人甲@example.com', role: 'user', status: 'active', reg: '2026-04-28', last: '2026-08-13 12:00', logins: 19, ip: '125.34.9.51', device: 'Web · Chrome', region: '陕西·西安', plan: '免费' },
+    { id: 11, name: '动漫迷妹', email: 'animefan@example.com', role: 'user', status: 'active', reg: '2026-05-19', last: '2026-08-16 06:18', logins: 205, ip: '106.61.2.88', device: 'iPad mini', region: '湖南·长沙', plan: '免费' },
+    { id: 12, name: '老电影收藏', email: 'classic@example.com', role: 'vip', status: 'active', reg: '2025-08-21', last: '2026-08-12 15:30', logins: 612, ip: '58.246.77.1', device: 'Fire TV', region: '天津·和平', plan: '电影会员' },
+    { id: 13, name: '测试账号01', email: 'test01@example.com', role: 'user', status: 'disabled', reg: '2026-07-01', last: '2026-07-01 10:00', logins: 2, ip: '127.0.0.1', device: 'Web · 测试', region: '未知', plan: '免费' },
+    { id: 14, name: '周末影院', email: 'weekend@example.com', role: 'user', status: 'active', reg: '2026-06-06', last: '2026-08-15 22:05', logins: 73, ip: '218.76.5.30', device: 'iPhone 13', region: '重庆·渝中', plan: '免费' },
+  ];
+  let adminSearchQ = '';
+
+  let sources = loadSources();
+  let activeNav = 'movie', activeSource = 'quantum', activeCategory = '最新', query = '';
+  let activeView = 'grid';
+  let loggedIn = false; // 登录门禁：仅登录后显示「用户管理」
+  const LOGIN_USER = 'admin', LOGIN_PASS = 'admin123'; // 演示账号
+  let items = [], mode = 'mock';
+  let currentList = [];
+  let currentSources = [], currentSourceIdx = 0;
+  let currentEpisode = 0, currentEpCount = 1;
+
+  // ---- storage ----
+  function loadSources() {
+    try {
+      const raw = localStorage.getItem('vh_sources');
+      if (raw) {
+        const list = JSON.parse(raw);
+        // 兼容旧数据（只有 name/urls 的条目补全新字段）
+        return list.map(s => Object.assign({
+          type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: ''
+        }, s));
+      }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(defaultSources));
+  }
+  function saveSourcesStore() {
+    localStorage.setItem('vh_sources', JSON.stringify(sources));
+  }
+  function getTmdbKey() {
+    return localStorage.getItem('vh_tmdb_key') || '';
+  }
+
+  // 所有配置源 URL 展平 + 兜底测试流，作为某影片的多线路播放地址
+  function buildSources() {
+    const urls = [];
+    sources.forEach(s => (s.urls || []).forEach(u => { if (u && !urls.includes(u)) urls.push(u); }));
+    sourcePool.forEach(u => { if (!urls.includes(u)) urls.push(u); });
+    return urls.length ? urls : sourcePool.slice();
+  }
+
+  // ---- rendering ----
+  function renderNav() {
+    const items = navItems.filter(n => n.id !== 'admin' || loggedIn);
+    let html = items.map(n => `
+      <div class="tile ${n.id === activeNav ? 'active' : ''}" onclick="onNav('${n.id}')">
+        <span class="ico">${n.icon}</span><span>${n.label}</span></div>`).join('');
+    if (loggedIn) {
+      html += `<div class="tile" onclick="doLogout()"><span class="ico">🚪</span><span>退出登录</span></div>`;
+    } else {
+      html += `<div class="tile" onclick="showLogin()"><span class="ico">🔐</span><span>登录</span></div>`;
+    }
+    document.getElementById('nav').innerHTML = html;
+  }
+  function showLogin() {
+    document.getElementById('loginErr').textContent = '';
+    document.getElementById('loginOverlay').classList.remove('hide');
+  }
+  function renderSources() {
+    document.getElementById('sources').innerHTML = sources.map((s, i) => `
+      <div class="tile ${'src' + i === activeSource ? 'active' : ''}" onclick="setSource('src${i}')">
+        <span class="ico">📡</span><span>${s.name}</span></div>`).join('');
+  }
+  function renderTabs() {
+    document.getElementById('tabs').innerHTML = categories.map(c => `
+      <button class="tab ${c === activeCategory ? 'active' : ''}" onclick="setCat('${c}')">${c}</button>`).join('');
+  }
+  function renderGrid() {
+    const el = document.getElementById('grid');
+    const catKey = catMap[activeCategory];
+    const list = items.filter(it => {
+      const mCat = catKey == null || it.category === catKey;
+      const mQ = !query || (it.title || '').includes(query);
+      return mCat && mQ;
+    });
+    currentList = list;
+    el.innerHTML = list.length ? list.map((it, li) => `
+      <div class="card" onclick="openDetail(${li})">
+        <div class="cover">
+          <div class="poster-fallback" style="background:${gradientFor(it.title)}">
+            <span class="pf-ico">🎬</span>
+          </div>
+          ${it.poster ? `<img class="poster" src="${it.poster}" loading="lazy" onerror="this.remove()">` : ''}
+          <span class="play-badge">▶ 播放</span>
+        </div>
+        <div class="meta"><div class="title">${it.title}</div>
+          <div class="ov">${it.overview || ''}</div>
+          <span class="badge">${it.status}</span></div></div>`).join('')
+      : '<div class="empty">该分类暂无数据（可在设置中切换 TMDB 数据源，或检查网络）</div>';
+  }
+
+  // 带超时的 fetch（被墙/慢源不会永久卡死）
+  function fetchWithTimeout(url, ms, opts) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, Object.assign({ signal: ctrl.signal }, opts))
+      .finally(() => clearTimeout(t));
+  }
+
+  // ---- data load ----
+  // 策略：先立刻渲染本地 mock（保证永远有内容），再后台带超时尝试 TMDB / archive，
+  // 谁先成功就用谁替换；被墙的源超时后自动放弃，不阻塞界面。
+  async function loadData() {
+    // 1) 立刻渲染本地 mock
+    items = mockBase.map((b, i) => ({
+      id: b[0], title: b[1], category: b[2], status: b[3],
+      overview: '', poster: POSTER_POOL[i % POSTER_POOL.length], videoSources: buildSources(),
+    }));
+    mode = 'mock';
+    document.getElementById('modePill').textContent = '本地 mock · ' + items.length + ' 部';
+    renderGrid();
+    renderFeatured();
+
+    // 2) 后台尝试 TMDB（有 key 时）
+    const key = getTmdbKey();
+    if (key) {
+      try {
+        const res = await fetchWithTimeout(
+          `https://api.themoviedb.org/3/trending/all/week?api_key=${encodeURIComponent(key)}&language=zh-CN`,
+          8000
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const results = (data.results || []).filter(r => r.poster_path);
+          if (results.length) {
+            items = results.map((r) => ({
+              id: 'tmdb_' + r.id,
+              title: r.title || r.name || '未命名',
+              category: r.media_type === 'tv' ? 'tv' : 'movie',
+              status: r.media_type === 'tv' ? '剧集' : '电影',
+              overview: r.overview || '',
+              poster: 'https://image.tmdb.org/t/p/w500' + r.poster_path,
+              videoSources: buildSources(),
+            }));
+            mode = 'tmdb';
+            document.getElementById('modePill').textContent = 'TMDB 实时 · ' + items.length + ' 部';
+            renderGrid();
+            renderFeatured();
+          }
+        }
+      } catch (e) {
+        toast('TMDB 拉取失败，保留本地 mock');
+      }
+    }
+
+    // 3) 后台尝试 archive.org 公共领域影视（带超时，失败不阻塞）
+    try {
+      const arch = await loadArchive();
+      if (arch.length) {
+        items = arch;
+        mode = 'archive';
+        document.getElementById('modePill').textContent = '公共领域影视库 · ' + items.length + ' 部';
+        renderGrid();
+        renderFeatured();
+      } else {
+        toast('archive.org 无可用影片，保留本地 mock');
+      }
+    } catch (e) {
+      toast('archive.org 拉取失败（可能被墙），保留本地 mock');
+    }
+  }
+
+  // 通过 archive.org 公开 API 检索公共领域/CC 影视（真实可播，合法）
+  async function loadArchive() {
+    const q = encodeURIComponent('collection:(Open_Source_Movies OR Prelinger)');
+    const searchUrl = `https://archive.org/advancedsearch.php?q=${q}&fl[]=identifier&fl[]=title&fl[]=year&fl[]=description&fl[]=downloads&rows=16&output=json&sort[]=downloads+desc`;
+    const res = await fetchWithTimeout(searchUrl, 8000);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const docs = (data.response && data.response.docs) || [];
+    const fetched = await Promise.all(docs.map(async (d) => {
+      try {
+        const mdRes = await fetchWithTimeout(`https://archive.org/metadata/${d.identifier}`, 6000);
+        if (!mdRes.ok) return null;
+        const md = await mdRes.json();
+        const files = md.files || [];
+        const mp4 = files.find(f => /\.mp4$/i.test(f.name) && !/sample/i.test(f.name));
+        if (!mp4) return null;
+        const url = `https://archive.org/download/${d.identifier}/${encodeURIComponent(mp4.name)}`;
+        const thumb = `https://archive.org/services/img/${d.identifier}`;
+        return {
+          id: 'ia_' + d.identifier,
+          title: d.title || d.identifier,
+          category: 'movie',
+          status: (d.year ? d.year + ' · ' : '') + '公共领域',
+          overview: (d.description || '').replace(/<[^>]+>/g, '').slice(0, 140),
+          poster: thumb,
+          videoSources: [url, ...buildSources()],
+        };
+      } catch (e) { return null; }
+    }));
+    return fetched.filter(Boolean);
+  }
+
+  // ---- detail ----
+  let currentDetail = null, featuredList = [], recList = [];
+  function openDetail(li) {
+    const it = currentList[li];
+    if (!it) return;
+    showDetail(it);
+  }
+  function openFeatured(i) {
+    const it = featuredList[i];
+    if (!it) return;
+    showDetail(it);
+  }
+  function openRec(idx) {
+    const it = recList[idx];
+    if (!it) return;
+    showDetail(it);
+  }
+  function showDetail(it) {
+    currentDetail = it;
+    const poster = it.poster || '';
+    const hero = document.getElementById('detailPoster');
+    if (poster) {
+      hero.style.backgroundImage = `url('${poster}')`;
+      hero.textContent = '';
+    } else {
+      hero.style.backgroundImage = gradientFor(it.title);
+      hero.textContent = '🎬';
+    }
+    document.getElementById('detailTitle').textContent = it.title;
+    document.getElementById('detailTopTitle').textContent = it.title;
+    document.getElementById('detailStatus').textContent = it.status || '';
+    document.getElementById('detailOv').textContent = it.overview || '（暂无简介）';
+    // episode / line list：除单部电影(movie)外，其余（含 latest 连更剧集）均展示选集
+    const multi = it.category !== 'movie';
+    const n = multi ? 12 : 1;
+    document.getElementById('detailEpsTitle').textContent = multi ? '选集' : '播放线路';
+    document.getElementById('detailEps').innerHTML = Array.from({length: n}, (_, i) =>
+      `<button class="ep-btn" onclick="playFromDetail(${i})">${multi ? '第 ' + (i + 1) + ' 集' : '线路 ' + (i + 1)}</button>`
+    ).join('');
+    renderRecs(it);
+    document.getElementById('detail').classList.add('show');
+  }
+  function renderRecs(it) {
+    let same = items.filter(o => o !== it && o.category === it.category);
+    if (same.length < 4) {
+      const others = items.filter(o => o !== it && o.category !== it.category);
+      same = same.concat(others);
+    }
+    recList = same.slice(0, 10);
+    document.getElementById('detailRecs').innerHTML = recList.map((o, idx) => {
+      const bg = o.poster ? `background-image:url('${o.poster}')` : `background:${gradientFor(o.title)}`;
+      const ico = o.poster ? '' : '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;opacity:.35">🎬</span>';
+      return `<div class="rec-card" onclick="openRec(${idx})">
+        <div class="rec-cover"><div class="rec-bg" style="${bg}"></div>${ico}</div>
+        <div class="rc-title">${o.title}</div>
+        <div class="rc-sub">${o.status || ''}</div>
+      </div>`;
+    }).join('');
+  }
+  function closeDetail() { document.getElementById('detail').classList.remove('show'); }
+  function playFromDetail(epIdx) {
+    const it = currentDetail;
+    if (!it) return;
+    closeDetail();
+    openPlayer(it, epIdx);
+  }
+
+  // ---- featured banner ----
+  function renderFeatured() {
+    featuredList = items.slice(0, 6);
+    document.getElementById('featured').innerHTML = featuredList.map((o, i) => {
+      const bg = o.poster ? `background-image:url('${o.poster}')` : `background:${gradientFor(o.title)}`;
+      const ico = o.poster ? '' : '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;opacity:.3">🎬</span>';
+      return `<div class="feat-card" onclick="openFeatured(${i})">
+        <div class="fc-bg" style="${bg}"></div>${ico}
+        <div class="fc-mask"></div>
+        <div class="fc-play">▶</div>
+        <div class="fc-info">
+          <div class="fc-title">${o.title}</div>
+          <div class="fc-sub">${o.status || '精选'} · ${(o.overview || '').slice(0, 22)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ---- player ----
+  function openPlayer(it, epIdx) {
+    if (!it) return;
+    currentSources = it.videoSources && it.videoSources.length ? it.videoSources : buildSources();
+    currentSourceIdx = 0;
+    // 集数：单部电影=1 线路；纪录片=6；其余（含最新剧集/tv/anime/variety）=12
+    currentEpCount = it.category === 'movie' ? 1 : (it.category === 'doc' ? 6 : 12);
+    currentEpisode = epIdx && epIdx > 0 ? epIdx : 0;
+    const isSeries = currentEpCount > 1;
+    document.getElementById('epBtn').style.display = isSeries ? '' : 'none';
+    document.getElementById('nextBtn').style.display = isSeries ? '' : 'none';
+    document.getElementById('playerTitle').textContent = titleWithEp(it.title);
+    hideMenus();
+    document.getElementById('epDrawer').classList.remove('show');
+    loadSource();
+    document.getElementById('overlay').classList.add('show');
+  }
+  function titleWithEp(title) {
+    return currentEpCount > 1 ? (title + ' · 第 ' + (currentEpisode + 1) + ' 集') : title;
+  }
+  function loadSource() {
+    const v = document.getElementById('player');
+    const sp = document.getElementById('playerSpinner');
+    sp.classList.add('show');
+    v.oncanplay = () => sp.classList.remove('show');
+    v.onerror = () => { sp.classList.remove('show'); tryNext(); };
+    clearTimeout(v._sp); v._sp = setTimeout(() => sp.classList.remove('show'), 6000);
+    v.src = currentSources[currentSourceIdx];
+    v.play().catch(() => {});
+    updateSrcLabel();
+  }
+  function tryNext() {
+    if (currentSourceIdx < currentSources.length - 1) { currentSourceIdx++; loadSource(); }
+    else document.getElementById('playerTitle').textContent = '所有线路暂无法访问：可能为网络限制，建议替换为你的自有/授权视频源';
+  }
+  function updateSrcLabel() {
+    document.getElementById('srcLabel').textContent = '线路 ' + (currentSourceIdx + 1) + '/' + currentSources.length;
+  }
+
+  // 线路选择下拉
+  function toggleLineMenu() {
+    const m = document.getElementById('lineMenu');
+    const show = m.style.display !== 'block';
+    hideMenus();
+    if (!show) return;
+    m.innerHTML = currentSources.map((u, i) =>
+      `<button class="lm-item ${i === currentSourceIdx ? 'active' : ''}" onclick="selectLine(${i})">线路 ${i + 1}${i === currentSourceIdx ? ' ✓' : ''}</button>`
+    ).join('');
+    m.style.display = 'block';
+  }
+  function selectLine(i) {
+    if (i === currentSourceIdx) { hideMenus(); return; }
+    currentSourceIdx = i; loadSource(); hideMenus();
+  }
+  // 倍速
+  const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  function toggleSpeedMenu() {
+    const m = document.getElementById('speedMenu');
+    const show = m.style.display !== 'block';
+    hideMenus();
+    if (!show) return;
+    const cur = document.getElementById('player').playbackRate || 1;
+    m.innerHTML = SPEEDS.map(s =>
+      `<button class="sm-item ${s === cur ? 'active' : ''}" onclick="selectSpeed(${s})">${s === 1 ? '1.0' : s}x${s === cur ? ' ✓' : ''}</button>`
+    ).join('');
+    m.style.display = 'block';
+  }
+  function selectSpeed(v) {
+    document.getElementById('player').playbackRate = v;
+    document.getElementById('speedBtn').textContent = (v === 1 ? '1.0' : v) + 'x';
+    hideMenus();
+  }
+  function hideMenus() {
+    document.getElementById('lineMenu').style.display = 'none';
+    document.getElementById('speedMenu').style.display = 'none';
+  }
+  // 选集抽屉
+  function toggleDrawer() {
+    const d = document.getElementById('epDrawer');
+    const show = !d.classList.contains('show');
+    hideMenus();
+    if (show) renderEpList();
+    d.classList.toggle('show', show);
+  }
+  function renderEpList() {
+    document.getElementById('epList').innerHTML = Array.from({ length: currentEpCount }, (_, i) =>
+      `<button class="ep ${i === currentEpisode ? 'active' : ''}" onclick="selectEpisode(${i})">${i + 1}</button>`
+    ).join('');
+  }
+  function selectEpisode(i) {
+    currentEpisode = i;
+    currentSourceIdx = 0;
+    const v = document.getElementById('player');
+    v.playbackRate = parseFloat(document.getElementById('speedBtn').textContent) || 1;
+    document.getElementById('playerTitle').textContent = titleWithEp(currentDetail ? currentDetail.title : '');
+    document.getElementById('epDrawer').classList.remove('show');
+    loadSource();
+  }
+  function nextEpisode() {
+    if (currentEpisode < currentEpCount - 1) selectEpisode(currentEpisode + 1);
+  }
+
+  // 全屏
+  function toggleFullscreen() {
+    const v = document.getElementById('player');
+    if (!document.fullscreenElement) { if (v.requestFullscreen) v.requestFullscreen(); }
+    else if (document.exitFullscreen) document.exitFullscreen();
+  }
+
+  function closePlayer() {
+    const v = document.getElementById('player');
+    v.pause(); v.removeAttribute('src'); v.load();
+    hideMenus();
+    document.getElementById('epDrawer').classList.remove('show');
+    document.getElementById('overlay').classList.remove('show');
+  }
+
+  // 播放页键盘快捷键：空格播放/暂停，←/→ 快退快进，F 全屏，Esc 返回
+  document.addEventListener('keydown', function (e) {
+    const pl = document.getElementById('overlay');
+    if (!pl.classList.contains('show')) return;
+    const v = document.getElementById('player');
+    if (e.key === 'Escape') { closePlayer(); }
+    else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
+    else if (e.key === 'ArrowRight') { v.currentTime = Math.min(v.duration || 0, v.currentTime + 5); }
+    else if (e.key === 'ArrowLeft') { v.currentTime = Math.max(0, v.currentTime - 5); }
+    else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); }
+  });
+
+  // ---- settings / source management ----
+  function onNav(id) {
+    activeNav = id;
+    if (id === 'settings') { openSettings(); renderNav(); return; }
+    if (id === 'admin' && !loggedIn) {
+      document.getElementById('loginOverlay').classList.remove('hide');
+      toast('请先登录');
+      return;
+    }
+    // 影视：回到首页；电视：切换到连续剧；解析/过刻：显示对应占位页
+    activeView = (id === 'movie' || id === 'tv') ? 'grid' : id;
+    if (id === 'movie') activeCategory = '最新';
+    if (id === 'tv') activeCategory = '连续剧';
+    renderNav(); renderTabs(); renderView(); renderGrid();
+  }
+  function renderView() {
+    document.getElementById('gridView').classList.toggle('show', activeView === 'grid');
+    document.getElementById('parseView').classList.toggle('show', activeView === 'parse');
+    document.getElementById('clipView').classList.toggle('show', activeView === 'clip');
+    document.getElementById('adminView').classList.toggle('show', activeView === 'admin');
+    if (activeView === 'parse') populateParseSources();
+    if (activeView === 'clip') renderClips();
+    if (activeView === 'admin') renderAdmin();
+  }
+  function populateParseSources() {
+    const sel = document.getElementById('parseSrc');
+    if (!sel) return;
+    sel.innerHTML = sources.map((s) =>
+      `<option value="${escapeAttr(s.endpoint || '')}">${escapeAttr(s.name)}${s.endpoint ? '' : '（未配置接口）'}</option>`
+    ).join('');
+  }
+  function buildParse() {
+    const ep = document.getElementById('parseSrc').value;
+    const url = document.getElementById('parseInput').value.trim();
+    const box = document.getElementById('parseResult');
+    if (!ep) { toast('该解析源未配置接口地址，请先到设置中填写 endpoint'); box.style.display = 'none'; return; }
+    if (!url) { toast('请填入视频地址'); box.style.display = 'none'; return; }
+    const req = ep + (ep.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url);
+    box.style.display = 'block';
+    box.innerHTML = `
+      <div class="pr-title">构造的请求 URL（仅演示，不会实际发送）</div>
+      <pre class="pr-code">${escapeHtml(req)}</pre>
+      <div class="pr-title">预期返回结构（示例）</div>
+      <pre class="pr-code">{
+  "code": 200,
+  "msg": "ok",
+  "url": "（你的自有/授权播放地址）"
+}</pre>
+      <div class="pr-warn">本项目不接入版权平台解析。此处仅展示请求构造逻辑；真实拉取须由你自有/已授权的接口提供，且须确保内容已获授权。</div>
+    `;
+  }
+
+  // 过刻：短视频瀑布流（mock 数据，封面复用真实开放授权海报）
+  const CLIPS = [
+    { t: '高燃混剪 · 宇宙篇', d: '00:38', v: '12.3万', p: 0 },
+    { t: '治愈系日落合集', d: '01:12', v: '8.6万', p: 1 },
+    { t: '街舞 battle 名场面', d: '00:45', v: '23.1万', p: 2 },
+    { t: '一镜到底挑战', d: '00:22', v: '5.4万', p: 3 },
+    { t: '美食快剪', d: '00:56', v: '9.9万', p: 4 },
+    { t: '萌宠日常', d: '00:31', v: '31.7万', p: 5 },
+    { t: '旅行 vlog 精选', d: '01:40', v: '4.2万', p: 6 },
+    { t: '游戏高光时刻', d: '00:28', v: '18.5万', p: 7 },
+    { t: '手势舞教程', d: '00:50', v: '7.1万', p: 8 },
+    { t: '极简动画短片', d: '01:05', v: '15.0万', p: 9 },
+  ];
+  function renderClips() {
+    const el = document.getElementById('clipWaterfall');
+    if (!el) return;
+    el.innerHTML = CLIPS.map(c => {
+      const poster = POSTER_POOL[c.p % POSTER_POOL.length];
+      return `<div class="clip-card" onclick="toast('短片播放为 UI 占位')">
+        <div class="clip-cover" style="background-image:url('${poster}')">
+          <span class="clip-play">▶</span>
+          <span class="clip-dur">${c.d}</span>
+        </div>
+        <div class="clip-title">${c.t}</div>
+        <div class="clip-meta">${c.v}次播放</div>
+      </div>`;
+    }).join('');
+  }
+  function escapeHtml(s) {
+    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function openSettings() {
+    document.getElementById('tmdbKey').value = getTmdbKey();
+    renderSrcEditor();
+    document.getElementById('settings').classList.add('show');
+  }
+  function closeSettings() { document.getElementById('settings').classList.remove('show'); }
+  const TYPE_OPTIONS = [
+    { value: 'raw', label: '直链源' },
+    { value: 'cms-xml', label: 'cms[xml]' },
+    { value: 'cms-json', label: 'cms[json]' },
+    { value: 'drpy-js0', label: 'drpy[js0]' },
+    { value: 'app-v3', label: 'app[v3]' },
+    { value: 'app-v1', label: 'app[v1]' },
+  ];
+  const SEARCH_OPTIONS = [
+    { value: 'off', label: '关闭' },
+    { value: 'aggregate', label: '聚合搜索' },
+    { value: 'local', label: '本站搜索' },
+  ];
+
+  function renderSrcEditor() {
+    document.getElementById('srcEditor').innerHTML = sources.map((s, i) => `
+      <div class="src-edit">
+        <input class="src-name" value="${escapeAttr(s.name)}" placeholder="* 名称" oninput="onSrcName(${i}, this.value)" />
+        <div class="form-row radio-row">
+          <span class="form-label required">类型</span>
+          ${TYPE_OPTIONS.map(t => `
+            <label class="radio-label"><input type="radio" name="type_${i}" ${s.type === t.value ? 'checked' : ''} onchange="onSrcType(${i}, '${t.value}')"> ${t.label}</label>
+          `).join('')}
+        </div>
+        <input class="src-field" value="${escapeAttr(s.endpoint)}" placeholder="接口，如 http://example.com/api.php/provide/vod/" oninput="onSrcEndpoint(${i}, this.value)" />
+        <div class="form-row radio-row">
+          <span class="form-label required">搜索</span>
+          ${SEARCH_OPTIONS.map(m => `
+            <label class="radio-label"><input type="radio" name="search_${i}" ${s.searchMode === m.value ? 'checked' : ''} onchange="onSrcSearch(${i}, '${m.value}')"> ${m.label}</label>
+          `).join('')}
+        </div>
+        ${s.searchMode === 'off' ? '<div class="error">请选择搜索</div>' : ''}
+        <input class="src-field" value="${escapeAttr(s.parseUrl)}" placeholder="解析" oninput="onSrcParse(${i}, this.value)" />
+        <div class="form-row two-col">
+          <select class="select-field" onchange="onSrcGroup(${i}, this.value)">
+            <option value="默认" ${s.group === '默认' ? 'selected' : ''}>默认</option>
+            <option value="影视" ${s.group === '影视' ? 'selected' : ''}>影视</option>
+            <option value="电视" ${s.group === '电视' ? 'selected' : ''}>电视</option>
+            <option value="解析" ${s.group === '解析' ? 'selected' : ''}>解析</option>
+            <option value="过刻" ${s.group === '过刻' ? 'selected' : ''}>过刻</option>
+          </select>
+          <input class="src-field" value="${escapeAttr(s.categories)}" placeholder="类别，逗号分隔" oninput="onSrcCategories(${i}, this.value)" />
+        </div>
+        <div class="form-label" style="margin-top:8px">播放直链（作为兜底线路）</div>
+        ${(s.urls || []).map((u, j) => `
+          <div class="url-row">
+            <input value="${escapeAttr(u)}" placeholder="视频直链 URL（mp4/m3u8）" oninput="onSrcUrl(${i}, ${j}, this.value)" />
+            <button onclick="delUrl(${i}, ${j})">✕</button>
+          </div>`).join('')}
+        <button class="mini-btn" onclick="addUrl(${i})">+ 添加 URL</button>
+        <button class="del-src" style="margin-left:8px" onclick="delSource(${i})">删除该源</button>
+      </div>`).join('');
+  }
+  function onSrcName(i, v) { sources[i].name = v; }
+  function onSrcType(i, v) { sources[i].type = v; }
+  function onSrcEndpoint(i, v) { sources[i].endpoint = v; }
+  function onSrcSearch(i, v) { sources[i].searchMode = v; }
+  function onSrcParse(i, v) { sources[i].parseUrl = v; }
+  function onSrcGroup(i, v) { sources[i].group = v; }
+  function onSrcCategories(i, v) { sources[i].categories = v; }
+  function onSrcUrl(i, j, v) { sources[i].urls[j] = v; }
+  function addUrl(i) { sources[i].urls.push(''); renderSrcEditor(); }
+  function delUrl(i, j) { sources[i].urls.splice(j, 1); renderSrcEditor(); }
+  function addSource() {
+    sources.push({ name: '新资源源', type: 'raw', endpoint: '', searchMode: 'off', parseUrl: '', group: '默认', categories: '', urls: [''] });
+    renderSrcEditor();
+  }
+  function delSource(i) { sources.splice(i, 1); renderSrcEditor(); }
+  function saveSettings() {
+    const key = document.getElementById('tmdbKey').value.trim();
+    localStorage.setItem('vh_tmdb_key', key);
+    saveSourcesStore();
+    closeSettings();
+    renderSources();
+    loadData();
+    toast('已保存，正在重新加载…');
+  }
+
+  // 本地生成渐变封面（离线可用，不依赖任何外链）：根据片名哈希取一组偏电影感的暗色调配色
+  const POSTER_PALETTE = [
+    ['#1A237E', '#3949AB'], ['#004D40', '#00897B'], ['#BF360C', '#D84315'],
+    ['#263238', '#546E7A'], ['#4A148C', '#7B1FA2'], ['#1B5E20', '#388E3C'],
+    ['#006064', '#0097A7'], ['#E65100', '#F57C00'], ['#880E4F', '#C2185B'],
+    ['#3E2723', '#6D4C41'], ['#01579B', '#0288D1'], ['#0D47A1', '#1976D2'],
+    ['#004D40', '#00796B'], ['#311B92', '#5E35B1'], ['#827717', '#AFB42B'],
+    ['#212121', '#616161'], ['#1A237E', '#303F9F'], ['#B71C1C', '#E53935'],
+  ];
+  function gradientFor(title) {
+    let h = 0;
+    const s = title || '';
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    const p = POSTER_PALETTE[h % POSTER_PALETTE.length];
+    return `linear-gradient(145deg, ${p[0]}, ${p[1]})`;
+  }
+
+  function setSource(id) { activeSource = id; renderSources(); }
+  function setCat(c) { activeCategory = c; renderTabs(); renderGrid(); }
+  function escapeAttr(s) { return (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  // 登录门禁
+  function doLogin() {
+    const u = (document.getElementById('loginUser').value || '').trim();
+    const p = document.getElementById('loginPass').value || '';
+    const err = document.getElementById('loginErr');
+    if (u === LOGIN_USER && p === LOGIN_PASS) {
+      loggedIn = true;
+      document.getElementById('loginOverlay').classList.add('hide');
+      document.getElementById('loginPass').value = '';
+      err.textContent = '';
+      renderNav();
+      toast('登录成功，已解锁用户管理');
+    } else {
+      err.textContent = '用户名或密码错误（演示账号 admin / admin123）';
+    }
+  }
+  function doLogout() {
+    loggedIn = false;
+    if (activeView === 'admin') { activeView = 'grid'; renderView(); }
+    renderNav();
+    toast('已退出登录');
+  }
+  function closeWin() {
+    const w = document.getElementById('macWin');
+    if (w) { w.style.transition = 'transform .22s ease, opacity .22s ease'; w.style.transform = 'scale(.92)'; w.style.opacity = '0'; }
+    toast('窗口已关闭（预览演示）');
+    setTimeout(() => { if (w) { w.style.transform = ''; w.style.opacity = '1'; } }, 900);
+  }
+  function toggleMode() {
+    const body = document.body;
+    const btn = document.getElementById('modeToggle');
+    if (body.classList.contains('desktop-mode')) {
+      body.classList.remove('desktop-mode');
+      btn.textContent = '🪟 macOS 窗口';
+      toast('已切换为全屏预览');
+    } else {
+      body.classList.add('desktop-mode');
+      btn.textContent = '🖥 全屏预览';
+      toast('已切换为 macOS 窗口预览');
+    }
+  }
+
+  document.getElementById('search').addEventListener('input', e => { query = e.target.value.trim(); renderGrid(); });
+  document.getElementById('adminSearch').addEventListener('input', e => { adminSearchQ = e.target.value.trim(); renderAdmin(); });
+
+  // ---- 用户管理（admin） ----
+  function avatarColor(name) {
+    const palette = ['#5B8CFF', '#00897B', '#E64A19', '#7B1FA2', '#00ACC1', '#C2185B', '#FFA000', '#2E7D32'];
+    let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return palette[h % palette.length];
+  }
+  function roleLabel(r) { return r === 'admin' ? '管理员' : r === 'vip' ? '会员' : '普通用户'; }
+  function roleCls(r) { return r === 'admin' ? 'role-admin' : r === 'vip' ? 'role-vip' : 'role-user'; }
+  function statCard(num, lbl, cls) {
+    return `<div class="admin-stat ${cls || ''}"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`;
+  }
+  function renderAdmin() {
+    const q = (adminSearchQ || '').toLowerCase();
+    const rf = document.getElementById('adminRoleFilter').value;
+    const sf = document.getElementById('adminStatusFilter').value;
+    const list = MOCK_USERS.filter(u => {
+      if (rf && u.role !== rf) return false;
+      if (sf && u.status !== sf) return false;
+      if (q && !(u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.ip || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
+    const total = MOCK_USERS.length;
+    const active = MOCK_USERS.filter(u => u.status === 'active').length;
+    const disabled = MOCK_USERS.filter(u => u.status === 'disabled').length;
+    const today = MOCK_USERS.filter(u => typeof u.last === 'string' && u.last.startsWith('2026-08-16')).length;
+    document.getElementById('adminStats').innerHTML =
+      statCard(total, '总用户', 'info') + statCard(active, '已启用', 'ok') +
+      statCard(disabled, '已禁用', 'warn') + statCard(today, '今日活跃');
+    document.getElementById('adminCount').textContent = `共 ${list.length} 位用户`;
+    document.getElementById('adminRows').innerHTML = list.length
+      ? list.map(u => {
+          const initial = u.name.slice(0, 1);
+          const statusBadge = u.status === 'active'
+            ? '<span class="status-badge status-active">已启用</span>'
+            : '<span class="status-badge status-disabled">已禁用</span>';
+          const toggleBtn = u.status === 'active'
+            ? '<button class="mini-btn danger" onclick="toggleUserStatus(' + u.id + ')">禁用</button>'
+            : '<button class="mini-btn ok" onclick="toggleUserStatus(' + u.id + ')">启用</button>';
+          return `<tr>
+            <td><div class="u-cell"><div class="u-avatar" style="background:${avatarColor(u.name)}">${escapeHtml(initial)}</div>
+              <div><div class="u-name">${escapeHtml(u.name)}</div><div class="u-email">${escapeHtml(u.email)}</div></div></div></td>
+            <td><span class="role-badge ${roleCls(u.role)}">${roleLabel(u.role)}</span>
+              <select class="admin-role-select" onchange="setUserRole(${u.id}, this.value)">
+                <option value="user"${u.role === 'user' ? ' selected' : ''}>普通</option>
+                <option value="vip"${u.role === 'vip' ? ' selected' : ''}>会员</option>
+                <option value="admin"${u.role === 'admin' ? ' selected' : ''}>管理员</option>
+              </select></td>
+            <td>${statusBadge}</td>
+            <td>${escapeHtml(u.last)}</td>
+            <td>${escapeHtml(u.reg)}</td>
+            <td class="ta-right"><div class="admin-actions">
+              <button class="mini-btn" onclick="openAdminDetail(${u.id})">详情</button>
+              <button class="mini-btn" onclick="genPassword(${u.id})">重置密码</button>
+              ${toggleBtn}
+            </div></td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="6" style="text-align:center;color:var(--text-2);padding:28px">没有匹配的用户</td></tr>';
+  }
+  function findUser(id) { return MOCK_USERS.find(u => u.id === id); }
+  function toggleUserStatus(id) {
+    const u = findUser(id); if (!u) return;
+    u.status = u.status === 'active' ? 'disabled' : 'active';
+    renderAdmin();
+    toast(u.status === 'disabled' ? `已禁用用户「${u.name}」` : `已启用用户「${u.name}」`);
+  }
+  function setUserRole(id, role) {
+    const u = findUser(id); if (!u) return;
+    u.role = role;
+    renderAdmin();
+    toast(`已将「${u.name}」设为${roleLabel(role)}`);
+  }
+  function genPassword(id) {
+    const u = findUser(id); if (!u) return;
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    let pwd = '';
+    for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+    toast(`已为「${u.name}」生成临时密码：${pwd}（演示：已通过邮件发送）`);
+    return pwd;
+  }
+  let adCurrent = null;
+  function openAdminDetail(id) {
+    const u = findUser(id); if (!u) return;
+    adCurrent = id;
+    document.getElementById('adAvatar').textContent = u.name.slice(0, 1);
+    document.getElementById('adAvatar').style.background = avatarColor(u.name);
+    document.getElementById('adName').textContent = u.name + (u.role === 'admin' ? '（管理员）' : '');
+    document.getElementById('adEmail').textContent = u.email;
+    const rows = [
+      ['用户ID', '#' + u.id], ['角色', roleLabel(u.role)],
+      ['状态', u.status === 'active' ? '已启用' : '已禁用'], ['套餐', u.plan],
+      ['登录次数', u.logins + ' 次'], ['注册时间', u.reg],
+      ['最近活跃', u.last], ['登录IP', u.ip],
+      ['设备', u.device], ['地区', u.region],
+    ];
+    document.getElementById('adBody').innerHTML = rows.map(r =>
+      `<div><div class="k">${escapeHtml(r[0])}</div><div class="v">${escapeHtml(String(r[1]))}</div></div>`).join('');
+    document.getElementById('adminDetail').classList.add('show');
+  }
+  function closeAdminDetail() { document.getElementById('adminDetail').classList.remove('show'); }
+
+  renderNav(); renderSources(); renderTabs(); loadData();
+</script>
+</body>
+</html>
