@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import '../data/mock_data.dart';
 import '../data/source_store.dart';
 import '../models/media.dart';
-import '../services/tmdb.dart';
-import '../services/archive.dart';
+import '../services/resource_collector.dart';
 import '../widgets/app_sidebar.dart';
 import '../widgets/category_tabs.dart';
 import '../widgets/top_search_bar.dart';
 import '../widgets/media_grid.dart';
-import 'player_screen.dart';
 import 'detail_screen.dart';
 import 'settings_screen.dart';
 import 'parse_screen.dart';
@@ -26,7 +24,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _activeNav = 'movie';
-  String _activeSource = 'quantum';
+  String _activeSource = 'all';
   String _activeCategory = '最新';
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
@@ -35,7 +33,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<MediaItem> _items = [];
   bool _loading = true;
-  String _mode = 'mock';
+  bool _collecting = false;
+  String _mode = 'demo';
+  DateTime? _collectedAt;
+  String? _collectMessage;
 
   @override
   void initState() {
@@ -43,7 +44,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _load();
   }
 
-  /// Build the multi-line playback source list from user-configured sources,
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Build the multi-line playback source list from user-configured raw links,
   /// then append the public/open-licensed fallback streams.
   static List<String> _buildSources(List<MediaSourceCfg> srcs) {
     final urls = <String>[];
@@ -59,83 +66,86 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
-    final key = await SourceStore.loadTmdbKey();
     final srcs = await SourceStore.loadSources();
+    final autoCollect = await SourceStore.loadAutoCollect();
+    final cached = await SourceStore.loadCollectedItems();
+    final cachedAt = await SourceStore.loadCollectedAt();
     final playSources = _buildSources(srcs);
 
-    // 1) 立刻渲染本地 mock，保证永远有内容可见（不卡在被墙的外源上）
     if (mounted) {
       setState(() {
-        _items = MockData.items
-            .map((e) => MediaItem(
-                  id: e.id,
-                  title: e.title,
-                  category: e.category,
-                  status: e.status,
-                  coverColor: e.coverColor,
-                  source: e.source,
-                  videoSources: playSources,
-                  posterUrl: e.posterUrl,
-                  overview: e.overview,
-                ))
-            .toList();
-        _mode = 'mock';
+        _items = cached.isNotEmpty ? cached : _demoItems(playSources);
+        _mode = cached.isNotEmpty ? 'cache' : 'demo';
+        _collectedAt = cachedAt;
         _loading = false;
       });
     }
 
-    // 2) 后台尝试 TMDB（有 key 时），成功则替换
-    if (key.isNotEmpty) {
-      try {
-        final tmdb = TmdbService(key);
-        final list = await tmdb.fetchTrending();
-        if (list.isNotEmpty && mounted) {
-          setState(() {
-            _items = list
-                .map((e) => MediaItem(
-                      id: e.id,
-                      title: e.title,
-                      category: e.category,
-                      status: e.status,
-                      coverColor: e.coverColor,
-                      source: e.source,
-                      videoSources: playSources,
-                      posterUrl: e.posterUrl,
-                      overview: e.overview,
-                    ))
-                .toList();
-            _mode = 'tmdb';
-          });
-        }
-      } catch (e) {
-        // keep mock
-      }
+    if (autoCollect) {
+      await _collectResources(silent: true);
+    }
+  }
+
+  List<MediaItem> _demoItems(List<String> playSources) {
+    return MockData.items
+        .map((e) => MediaItem(
+              id: e.id,
+              title: e.title,
+              category: e.category,
+              status: e.status,
+              coverColor: e.coverColor,
+              source: e.source,
+              videoSources: playSources,
+              posterUrl: e.posterUrl,
+              overview: e.overview,
+            ))
+        .toList();
+  }
+
+  Future<void> _collectResources({bool silent = false}) async {
+    if (_collecting) return;
+    final key = await SourceStore.loadTmdbKey();
+    final srcs = await SourceStore.loadSources();
+    if (mounted) {
+      setState(() {
+        _collecting = true;
+        if (!silent) _collectMessage = null;
+      });
     }
 
-    // 3) 后台尝试 archive.org 公共领域影视（带超时，失败不阻塞）
     try {
-      final arch = await ArchiveService().fetchPublicDomain();
-      if (arch.isNotEmpty && mounted) {
-        setState(() {
-          _items = arch
-              .map((e) => MediaItem(
-                    id: e.id,
-                    title: e.title,
-                    category: e.category,
-                    status: e.status,
-                    coverColor: e.coverColor,
-                    source: e.source,
-                    // archive's own mp4 first, then open-licensed fallback lines.
-                    videoSources: [...e.videoSources, ...playSources],
-                    posterUrl: e.posterUrl,
-                    overview: e.overview,
-                  ))
-              .toList();
-          _mode = 'archive';
-        });
+      final result = await const ResourceCollector().collect(
+        sources: srcs,
+        tmdbKey: key,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (result.items.isNotEmpty) {
+          _items = result.items;
+          _mode = 'collected';
+          _collectedAt = DateTime.now();
+        }
+        _collectMessage = result.messages.join('；');
+      });
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.items.isEmpty ? '未采集到可用资源' : '采集完成：${result.items.length} 部',
+            ),
+          ),
+        );
       }
     } catch (e) {
-      // keep previous (mock or tmdb)
+      if (!mounted) return;
+      setState(() => _collectMessage = '采集失败：$e');
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('采集失败：$e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _collecting = false);
     }
   }
 
@@ -145,9 +155,22 @@ class _HomeScreenState extends State<HomeScreen> {
         return 'TMDB 实时';
       case 'archive':
         return '公共领域影视库';
+      case 'collected':
+        return '真实采集';
+      case 'cache':
+        return '采集缓存';
       default:
-        return '本地 mock';
+        return '演示数据';
     }
+  }
+
+  String get _statusText {
+    final count = '${_items.length} 部';
+    if (_collecting) return '采集中… · $count';
+    final at = _collectedAt;
+    if (at == null) return '$_modeLabel · $count';
+    final mm = at.minute.toString().padLeft(2, '0');
+    return '$_modeLabel · $count · ${at.hour}:$mm';
   }
 
   List<MediaItem> get _filtered {
@@ -163,9 +186,29 @@ class _HomeScreenState extends State<HomeScreen> {
     final catKey = categoryMap[_activeCategory];
     return _items.where((item) {
       final matchCat = catKey == null || item.category == catKey;
+      final matchSource = _matchesSource(item);
       final matchQuery = _query.isEmpty || item.title.contains(_query);
-      return matchCat && matchQuery;
+      return matchCat && matchSource && matchQuery;
     }).toList();
+  }
+
+  bool _matchesSource(MediaItem item) {
+    switch (_activeSource) {
+      case 'archive':
+        return item.source == 'Internet Archive';
+      case 'cc':
+        return item.status.contains('CC') || item.status.contains('公共领域');
+      case 'cms':
+        return item.id.startsWith('cms_');
+      case 'raw':
+        return item.status == '直链资源';
+      case 'local':
+        return item.source == '演示数据';
+      case 'tmdb':
+        return item.source == 'TMDB';
+      default:
+        return true;
+    }
   }
 
   void _onNav(String id) {
@@ -272,17 +315,35 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.surfaceAlt,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Text(
-                          _loading
-                              ? '加载中…'
-                              : _modeLabel + ' · ${_items.length} 部',
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        child: Tooltip(
+                          message: _collectMessage ?? '读取真实采集缓存；刷新会拉取公共领域/授权接口资源',
+                          child: Text(
+                            _loading ? '加载中…' : _statusText,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
                         ),
+                      ),
+                      IconButton(
+                        tooltip: '采集资源',
+                        onPressed: _collecting ? null : () => _collectResources(),
+                        icon: _collecting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.sync, size: 20),
                       ),
                       const SizedBox(width: 8),
                       TopSearchBar(

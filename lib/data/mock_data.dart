@@ -13,15 +13,13 @@ class MockData {
   ];
 
   static const List<MediaSource> sources = [
-    MediaSource(id: 'quantum', name: '量子资源', icon: Icons.auto_awesome),
-    MediaSource(id: 'extra', name: '非凡资源', icon: Icons.star_border),
-    MediaSource(id: 'mydia', name: '明帝影视', icon: Icons.video_library_outlined),
-    MediaSource(id: 'leidian', name: '雷电影视', icon: Icons.bolt_outlined),
+    MediaSource(id: 'all', name: '全部资源', icon: Icons.all_inbox_outlined),
+    MediaSource(id: 'archive', name: '公共领域', icon: Icons.public),
+    MediaSource(id: 'cc', name: 'CC 授权', icon: Icons.verified_outlined),
+    MediaSource(id: 'cms', name: '自有 CMS', icon: Icons.storage_outlined),
+    MediaSource(id: 'raw', name: '直链资源', icon: Icons.link_outlined),
     MediaSource(id: 'local', name: '本地资源', icon: Icons.folder_outlined),
-    MediaSource(id: 'star', name: '星辰影视', icon: Icons.stars),
-    MediaSource(id: 'aurora', name: '极光资源', icon: Icons.blur_on),
-    MediaSource(id: 'global', name: '全网搜', icon: Icons.travel_explore),
-    MediaSource(id: 'cloud', name: '云端解析', icon: Icons.cloud_outlined),
+    MediaSource(id: 'tmdb', name: 'TMDB 元数据', icon: Icons.movie_filter_outlined),
   ];
 
   static const List<String> categories = [
@@ -122,7 +120,7 @@ class MockData {
       category: b[2] as String,
       status: b[3] as String,
       coverColor: b[4] as Color,
-      source: '量子资源',
+      source: '演示数据',
       videoSources: _srcs(i),
       posterUrl: posterPool[i % posterPool.length],
     );

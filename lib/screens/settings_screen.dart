@@ -17,6 +17,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _keyController = TextEditingController();
   List<MediaSourceCfg> _sources = [];
+  bool _autoCollect = true;
 
   static const List<Map<String, String>> _types = [
     {'value': 'raw', 'label': '直链源'},
@@ -39,13 +40,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _keyController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final key = await SourceStore.loadTmdbKey();
     final srcs = await SourceStore.loadSources();
+    final autoCollect = await SourceStore.loadAutoCollect();
     if (mounted) {
       setState(() {
         _keyController.text = key;
         _sources = srcs;
+        _autoCollect = autoCollect;
       });
     }
   }
@@ -53,6 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _save() async {
     await SourceStore.saveTmdbKey(_keyController.text.trim());
     await SourceStore.saveSources(_sources);
+    await SourceStore.saveAutoCollect(_autoCollect);
     if (mounted) Navigator.of(context).pop(true);
   }
 
@@ -79,14 +89,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 6),
           const Text(
-            '仅拉取影片元数据（海报/简介/分类），不涉及视频流。留空则使用本地 mock 数据。',
+            '仅拉取影片元数据（海报/简介/分类），不提供视频流。留空也会采集公共领域影片。',
             style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('启动时自动采集'),
+            subtitle: const Text(
+              '打开后进入首页会后台刷新公共领域影片和你配置的授权接口。',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            value: _autoCollect,
+            onChanged: (v) => setState(() => _autoCollect = v),
           ),
           const SizedBox(height: 20),
           const Text('资源源管理', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           const Text(
-            '填入你自有 / 已授权的接口或视频直链。本学习应用只保存配置，不会自动调用第三方接口抓取版权内容。',
+            '填入你自有 / 已授权的接口或视频直链。cms[json]/cms[xml] 会参与自动采集；直链源作为播放兜底线路。',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const SizedBox(height: 12),
