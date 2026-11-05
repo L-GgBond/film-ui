@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media.dart';
 import '../theme/app_theme.dart';
 import 'player_screen.dart';
@@ -67,8 +68,11 @@ class DetailScreen extends StatelessWidget {
                   if (poster != null)
                     Opacity(
                       opacity: 0.25,
-                      child: Image.network(poster, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      child: CachedNetworkImage(
+                          imageUrl: poster,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 600,
+                          errorWidget: (_, __, ___) => const SizedBox.shrink()),
                     ),
                   Container(
                     decoration: BoxDecoration(
@@ -106,8 +110,11 @@ class DetailScreen extends StatelessWidget {
                         ),
                       ),
                       child: poster != null
-                          ? Image.network(poster, fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Center(
+                          ? CachedNetworkImage(
+                              imageUrl: poster,
+                              fit: BoxFit.cover,
+                              memCacheWidth: 240,
+                              errorWidget: (_, __, ___) => const Center(
                                 child: Icon(Icons.movie_outlined, size: 36, color: Colors.white70)))
                           : const Center(
                               child: Icon(Icons.movie_outlined, size: 36, color: Colors.white70)),
@@ -245,9 +252,8 @@ class DetailScreen extends StatelessWidget {
                                 ),
                                 image: poster != null
                                     ? DecorationImage(
-                                        image: NetworkImage(poster),
+                                        image: CachedNetworkImageProvider(poster),
                                         fit: BoxFit.cover,
-                                        onError: (_, __) {},
                                       )
                                     : null,
                               ),
@@ -293,6 +299,8 @@ class DetailScreen extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => PlayerScreen(
           title: item.title,
+          id: item.id,
+          posterUrl: item.posterUrl,
           videoSources: item.videoSources.isNotEmpty
               ? item.videoSources
               : const ['https://media.w3.org/2010/05/sintel/trailer.mp4'],

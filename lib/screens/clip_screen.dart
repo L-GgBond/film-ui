@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../data/mock_data.dart';
 
@@ -56,9 +57,8 @@ class ClipScreen extends StatelessWidget {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
                           image: DecorationImage(
-                            image: NetworkImage(poster),
+                            image: CachedNetworkImageProvider(poster),
                             fit: BoxFit.cover,
-                            onError: (_, __) {},
                           ),
                         ),
                       ),

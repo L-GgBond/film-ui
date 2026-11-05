@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media.dart';
 import '../theme/app_theme.dart';
 
@@ -51,9 +52,8 @@ class FeaturedBanner extends StatelessWidget {
                     ),
                     image: poster != null
                         ? DecorationImage(
-                            image: NetworkImage(poster),
+                            image: CachedNetworkImageProvider(poster),
                             fit: BoxFit.cover,
-                            onError: (_, __) {},
                           )
                         : null,
                     boxShadow: const [

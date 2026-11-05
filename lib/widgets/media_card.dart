@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../models/media.dart';
 
@@ -7,8 +8,16 @@ import '../models/media.dart';
 class MediaCard extends StatelessWidget {
   final MediaItem item;
   final VoidCallback? onTap;
+  final bool isFavorite;
+  final ValueChanged<MediaItem>? onToggleFavorite;
 
-  const MediaCard({super.key, required this.item, this.onTap});
+  const MediaCard({
+    super.key,
+    required this.item,
+    this.onTap,
+    this.isFavorite = false,
+    this.onToggleFavorite,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -26,13 +35,45 @@ class MediaCard extends StatelessWidget {
           children: [
             // 用 Expanded 占满网格单元剩余高度，避免固定 2:3 海报 + 文字导致纵向溢出。
             Expanded(
-              child: poster != null
-                  ? Image.network(
-                      poster,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _placeholder(item),
-                    )
-                  : _placeholder(item),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  poster != null
+                      ? CachedNetworkImage(
+                          imageUrl: poster,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 300,
+                          errorWidget: (_, __, ___) => _placeholder(item),
+                        )
+                      : _placeholder(item),
+                  if (onToggleFavorite != null)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => onToggleFavorite!(item),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.black38,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              isFavorite ? Icons.favorite : Icons.favorite_border,
+                              color: isFavorite ? Colors.redAccent : Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(8),

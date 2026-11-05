@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../theme/app_theme.dart';
+import '../data/source_store.dart';
 
 /// Full-screen player with multiple playback sources, line/speed pickers,
 /// and an episode drawer for series.
@@ -13,6 +15,9 @@ class PlayerScreen extends StatefulWidget {
   final List<String> videoSources;
   final List<String> episodes; // 选集标签；空列表 = 单部电影（播放线路）
   final int initialEpisode;
+  final String? id; // 用于观看历史去重；缺省回退到 title
+  final String? posterUrl;
+  final int initialPositionMs; // 续播：打开时跳转到上次进度
 
   const PlayerScreen({
     super.key,
@@ -20,6 +25,9 @@ class PlayerScreen extends StatefulWidget {
     required this.videoSources,
     this.episodes = const [],
     this.initialEpisode = 0,
+    this.id,
+    this.posterUrl,
+    this.initialPositionMs = 0,
   });
 
   @override
@@ -34,7 +42,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _drawerOpen = false;
   int _episode = 0;
   double _speed = 1.0;
+  bool _fullscreen = false;
   Timer? _hideTimer;
+  final FocusNode _focusNode = FocusNode();
 
   static const List<double> _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
@@ -65,6 +75,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // 用局部变量，避免切换线路时旧回调错误操作新控制器。
       if (mounted) {
         controller.setPlaybackSpeed(_speed);
+        // 续播：打开时跳转到上次观看进度。
+        if (widget.initialPositionMs > 0) {
+          controller.seekTo(Duration(milliseconds: widget.initialPositionMs));
+        }
         controller.play();
         _scheduleHide();
       }
@@ -130,12 +144,75 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (c != null && c.value.isInitialized) c.setPlaybackSpeed(v);
   }
 
+  // ---- 键盘快捷键（桌面 / Web）----
+  // 空格：播放/暂停；←/→：快退/快进 10s；F：全屏切换；Esc：退出全屏或返回。
+  void _handleKey(RawKeyEvent event) {
+    if (event is! RawKeyDownEvent) return;
+    final c = _controller;
+    if (event.logicalKey == LogicalKeyboardKey.space) {
+      _togglePlay();
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (c != null && c.value.isInitialized) {
+        final target = c.value.position - const Duration(seconds: 10);
+        c.seekTo(target < Duration.zero ? Duration.zero : target);
+      }
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (c != null && c.value.isInitialized) {
+        c.seekTo(c.value.position + const Duration(seconds: 10));
+      }
+    } else if (event.logicalKey == LogicalKeyboardKey.keyF) {
+      _toggleFullscreen();
+    } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (_fullscreen) {
+        _toggleFullscreen();
+      } else {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  // 全屏：横屏 + 沉浸式隐藏系统 UI；退出时恢复竖屏 + 正常 UI。
+  void _toggleFullscreen() {
+    setState(() => _fullscreen = !_fullscreen);
+    if (_fullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
+  }
+
   String get _fullTitle =>
       widget.episodes.isEmpty ? widget.title : '${widget.title} · 第 ${_episode + 1} 集';
 
   @override
   void dispose() {
     _hideTimer?.cancel();
+    // 退出时记录观看进度（按 id 去重，供首页「继续观看」续播）。
+    final c = _controller;
+    if (c != null && c.value.isInitialized) {
+      final pos = c.value.position.inMilliseconds;
+      final dur = c.value.duration.inMilliseconds;
+      if (pos > 0 && dur > 0) {
+        SourceStore.recordWatch(
+          id: widget.id ?? widget.title,
+          title: widget.title,
+          posterUrl: widget.posterUrl,
+          videoSources: widget.videoSources,
+          positionMs: pos,
+          durationMs: dur,
+        );
+      }
+    }
+    if (_fullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
+    _focusNode.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -147,8 +224,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final isLastEp = _episode >= widget.episodes.length - 1;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
+      body: Focus(
+        autofocus: true,
+        child: RawKeyboardListener(
+          focusNode: _focusNode,
+          onKey: _handleKey,
+          child: Stack(
+            children: [
           // video
           Positioned.fill(
             child: FutureBuilder<void>(
@@ -253,6 +335,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         child: Text('${_speed == 1.0 ? '1.0' : _speed}x',
                             style: const TextStyle(color: Colors.white70, fontSize: 13)),
                       ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                        color: Colors.white,
+                      ),
+                      tooltip: '全屏 (F)',
+                      onPressed: _toggleFullscreen,
                     ),
                     if (hasEp)
                       IconButton(
@@ -383,6 +473,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
         ],
+        ),
+        ),
       ),
     );
   }

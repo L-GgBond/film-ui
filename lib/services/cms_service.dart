@@ -39,6 +39,39 @@ class CmsService {
     return uri.replace(queryParameters: query);
   }
 
+  /// 真实 CMS 搜索：MacCMS 约定使用 `?ac=detail&wd=关键词`。
+  /// 复用与目录采集相同的解析逻辑（JSON / XML 自适应）。
+  Future<List<MediaItem>> search(MediaSourceCfg source, String keyword) async {
+    final endpoint = source.endpoint.trim();
+    final kw = keyword.trim();
+    if (endpoint.isEmpty || kw.isEmpty) return const [];
+
+    final uri = _searchUri(endpoint, source.type, kw);
+    final res =
+        await HttpUtil.get(uri, timeout: const Duration(seconds: _timeoutSeconds));
+    if (res.statusCode != 200) {
+      throw Exception('${source.name} HTTP ${res.statusCode}');
+    }
+    final body = utf8.decode(res.bodyBytes);
+    if (source.type == 'cms-xml' || body.trimLeft().startsWith('<')) {
+      return _parseXml(body, source);
+    }
+    return _parseJson(body, source);
+  }
+
+  Uri _searchUri(String endpoint, String type, String keyword) {
+    final uri = Uri.parse(endpoint);
+    final query = Map<String, String>.from(uri.queryParameters);
+    if (type == 'cms-json' || type == 'cms-xml') {
+      query['ac'] = 'detail';
+      query['wd'] = keyword;
+    } else {
+      // 非标准源：把关键词拼到 query 的 wd 字段，兼容多数自建 API。
+      query['wd'] = keyword;
+    }
+    return uri.replace(queryParameters: query);
+  }
+
   List<MediaItem> _parseJson(String body, MediaSourceCfg source) {
     final decoded = json.decode(body);
     final root = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};

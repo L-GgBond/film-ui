@@ -9,6 +9,8 @@ class MediaGrid extends StatelessWidget {
   final ValueChanged<MediaItem>? onTap;
   final bool shrinkWrap;
   final ScrollPhysics? physics;
+  final Set<String> favoriteIds;
+  final ValueChanged<MediaItem>? onToggleFavorite;
 
   const MediaGrid({
     super.key,
@@ -16,6 +18,8 @@ class MediaGrid extends StatelessWidget {
     this.onTap,
     this.shrinkWrap = false,
     this.physics,
+    this.favoriteIds = const {},
+    this.onToggleFavorite,
   });
 
   @override
@@ -35,10 +39,15 @@ class MediaGrid extends StatelessWidget {
             childAspectRatio: 2 / 3,
           ),
           itemCount: items.length,
-          itemBuilder: (context, index) => MediaCard(
-            item: items[index],
-            onTap: onTap == null ? null : () => onTap!(items[index]),
-          ),
+          itemBuilder: (context, index) {
+            final it = items[index];
+            return MediaCard(
+              item: it,
+              isFavorite: favoriteIds.contains(it.id),
+              onTap: onTap == null ? null : () => onTap!(it),
+              onToggleFavorite: onToggleFavorite,
+            );
+          },
         );
       },
     );

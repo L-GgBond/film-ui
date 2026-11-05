@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../data/mock_data.dart';
 import '../data/source_store.dart';
 import '../models/media.dart';
 import '../services/resource_collector.dart';
+import '../services/cms_service.dart';
 import '../widgets/app_sidebar.dart';
 import '../widgets/category_tabs.dart';
 import '../widgets/top_search_bar.dart';
@@ -14,6 +16,7 @@ import 'parse_screen.dart';
 import 'clip_screen.dart';
 import 'admin_screen.dart';
 import 'login_screen.dart';
+import 'player_screen.dart';
 import '../widgets/featured_banner.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -39,6 +42,16 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _collectedAt;
   String? _collectMessage;
 
+  Set<String> _favoriteIds = {}; // 收藏的影片 id 集合（用于心形状态 + 收藏源过滤）
+  List<Map<String, dynamic>> _history = []; // 观看历史（用于首页「继续观看」）
+  List<MediaSourceCfg> _cmsSearchSources = []; // 配置了可搜索的 CMS 源
+
+  // 真实 CMS 搜索结果（null = 未发起搜索；非 null = 展示搜索结果视图）
+  List<MediaItem>? _searchResults;
+  bool _searching = false;
+  String? _searchError;
+  Timer? _searchDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -47,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -56,6 +70,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final cached = await SourceStore.loadCollectedItems();
     final cachedAt = await SourceStore.loadCollectedAt();
     final loggedIn = await SourceStore.loadLoggedIn();
+    final favorites = await SourceStore.loadFavorites();
+    final history = await SourceStore.loadHistory();
+    final srcs = await SourceStore.loadSources();
+    final cmsSearchSources = srcs
+        .where((s) => s.endpoint.trim().isNotEmpty && s.searchMode != 'off')
+        .toList();
 
     if (mounted) {
       setState(() {
@@ -63,6 +83,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _mode = cached.isNotEmpty ? 'cache' : 'demo';
         _collectedAt = cachedAt;
         _loggedIn = loggedIn;
+        _favoriteIds = favorites.toSet();
+        _history = history;
+        _cmsSearchSources = cmsSearchSources;
         _loading = false;
       });
     }
@@ -184,6 +207,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _matchesSource(MediaItem item) {
     switch (_activeSource) {
+      case 'favorite':
+        return _favoriteIds.contains(item.id);
       case 'archive':
         return item.source == 'Internet Archive';
       case 'cc':
@@ -199,6 +224,280 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         return true;
     }
+  }
+
+  Future<void> _toggleFavorite(MediaItem item) async {
+    final added = await SourceStore.toggleFavorite(item.id);
+    if (!mounted) return;
+    setState(() {
+      if (added) {
+        _favoriteIds.add(item.id);
+      } else {
+        _favoriteIds.remove(item.id);
+      }
+    });
+  }
+
+  /// 返回播放页后，轻量刷新收藏 / 历史（只读 SharedPreferences，不触发采集）。
+  Future<void> _reloadLocalState() async {
+    final favorites = await SourceStore.loadFavorites();
+    final history = await SourceStore.loadHistory();
+    if (mounted) {
+      setState(() {
+        _favoriteIds = favorites.toSet();
+        _history = history;
+      });
+    }
+  }
+
+  void _onSearchChanged(String v) {
+    setState(() => _query = v);
+    _searchDebounce?.cancel();
+    if (v.trim().isEmpty) {
+      setState(() => _searchResults = null);
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 450), () => _runSearch(v));
+  }
+
+  Future<void> _runSearch(String raw) async {
+    final query = raw.trim();
+    if (query.isEmpty || _cmsSearchSources.isEmpty) {
+      if (mounted) setState(() => _searchResults = null);
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _searching = true;
+        _searchResults = [];
+        _searchError = null;
+      });
+    }
+    try {
+      final results = <MediaItem>[];
+      for (final src in _cmsSearchSources) {
+        try {
+          final items = await CmsService().search(src, query);
+          results.addAll(items);
+        } catch (_) {
+          // 单源失败不阻断整体搜索
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+          _searching = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _searchResults = [];
+          _searchError = '搜索失败：$e';
+          _searching = false;
+        });
+      }
+    }
+  }
+
+  /// 首页「继续观看」横向卡片行；仅默认视图（全部资源 + 无搜索词）显示。
+  Widget _buildHistoryRow() {
+    if (_history.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 10),
+          child: Text('继续观看',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+        ),
+        SizedBox(
+          height: 150,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _history.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            itemBuilder: (context, i) {
+              final rec = _history[i];
+              final poster = rec['posterUrl'] as String?;
+              final title = (rec['title'] as String?) ?? '';
+              final pos = (rec['positionMs'] as int? ?? 0);
+              final dur = (rec['durationMs'] as int? ?? 0);
+              final progress = dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0.0;
+              final sources = (rec['videoSources'] as List?)?.whereType<String>().toList() ?? const <String>[];
+              return GestureDetector(
+                onTap: () {
+                  if (sources.isEmpty) return;
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) => PlayerScreen(
+                            title: title,
+                            id: rec['id'] as String?,
+                            posterUrl: poster,
+                            videoSources: sources,
+                            initialPositionMs: pos,
+                          ),
+                        ),
+                      )
+                      .then((_) => _reloadLocalState());
+                },
+                child: Container(
+                  width: 160,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: AppTheme.surface,
+                  ),
+                  child: Stack(
+                    children: [
+                      if (poster != null)
+                        Positioned.fill(
+                          child: CachedNetworkImage(
+                            imageUrl: poster,
+                            fit: BoxFit.cover,
+                            memCacheWidth: 200,
+                            errorWidget: (_, __, ___) =>
+                                Container(color: AppTheme.surfaceAlt),
+                          ),
+                        )
+                      else
+                        const Positioned.fill(
+                            child: ColoredBox(color: AppTheme.surfaceAlt)),
+                      Positioned.fill(
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Colors.black87],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('续播',
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 10)),
+                        ),
+                      ),
+                      Positioned(
+                        left: 10,
+                        right: 10,
+                        bottom: 10,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                backgroundColor: Colors.white38,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppTheme.accent),
+                                minHeight: 4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchView() {
+    if (_searching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_searchResults!.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 48, color: AppTheme.textSecondary),
+            const SizedBox(height: 12),
+            Text(_searchError ?? '未找到匹配的影片（可能该 CMS 源无结果或不可达）',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ],
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text('搜索结果 · ${_searchResults!.length} 条',
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 14)),
+          ),
+          MediaGrid(
+            items: _searchResults!,
+            onTap: (item) => Navigator.of(context)
+                .push(
+                  MaterialPageRoute(
+                    builder: (_) => DetailScreen(item: item, items: _items),
+                  ),
+                )
+                .then((_) => _reloadLocalState()),
+            favoriteIds: _favoriteIds,
+            onToggleFavorite: _toggleFavorite,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomeView() {
+    final showHistory =
+        _activeSource == 'all' && _query.isEmpty && _history.isNotEmpty;
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          if (showHistory) _buildHistoryRow(),
+          FeaturedBanner(
+            items: _items,
+            onTap: _openPlayer,
+          ),
+          MediaGrid(
+            items: _filtered,
+            onTap: _openPlayer,
+            favoriteIds: _favoriteIds,
+            onToggleFavorite: _toggleFavorite,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onNav(String id) {
@@ -267,11 +566,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openPlayer(MediaItem item) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => DetailScreen(item: item, items: _items),
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => DetailScreen(item: item, items: _items),
+          ),
+        )
+        .then((_) => _reloadLocalState());
   }
 
   @override
@@ -341,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Flexible(
                         child: TopSearchBar(
                           controller: _searchController,
-                          onChanged: (v) => setState(() => _query = v),
+                          onChanged: _onSearchChanged,
                         ),
                       ),
                     ],
@@ -351,36 +652,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
-                      : _filtered.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.search_off,
-                                      size: 48, color: AppTheme.textSecondary),
-                                  const SizedBox(height: 12),
-                                  Text('未找到匹配的影片',
-                                      style:
-                                          TextStyle(color: AppTheme.textSecondary)),
-                                ],
-                              ),
-                            )
-                          : SingleChildScrollView(
-                              child: Column(
-                                children: [
-                                  FeaturedBanner(
-                                    items: _items,
-                                    onTap: _openPlayer,
+                      : _searchResults != null
+                          ? _buildSearchView()
+                          : _filtered.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.search_off,
+                                          size: 48, color: AppTheme.textSecondary),
+                                      const SizedBox(height: 12),
+                                      Text('未找到匹配的影片',
+                                          style: TextStyle(
+                                              color: AppTheme.textSecondary)),
+                                    ],
                                   ),
-                                  MediaGrid(
-                                    items: _filtered,
-                                    onTap: _openPlayer,
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                  ),
-                                ],
-                              ),
-                            ),
+                                )
+                              : _buildHomeView(),
                 ),
               ],
             ),

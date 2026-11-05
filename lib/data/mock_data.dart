@@ -14,6 +14,7 @@ class MockData {
 
   static const List<MediaSource> sources = [
     MediaSource(id: 'all', name: '全部资源', icon: Icons.all_inbox_outlined),
+    MediaSource(id: 'favorite', name: '我的收藏', icon: Icons.favorite_outlined),
     MediaSource(id: 'archive', name: '公共领域', icon: Icons.public),
     MediaSource(id: 'cc', name: 'CC 授权', icon: Icons.verified_outlined),
     MediaSource(id: 'cms', name: '自有 CMS', icon: Icons.storage_outlined),

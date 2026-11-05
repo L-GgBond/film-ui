@@ -74,6 +74,8 @@ class SourceStore {
   static const String _kItemsAt = 'vh_collected_items_at';
   static const String _kAutoCollect = 'vh_auto_collect';
   static const String _kLoggedIn = 'vh_logged_in';
+  static const String _kFavorites = 'vh_favorites';
+  static const String _kHistory = 'vh_history';
   static const Map<String, String> _legacyNames = {
     '量子资源': 'Sintel 预告片',
     '非凡资源': 'Big Buck Bunny 样片',
@@ -197,6 +199,80 @@ class SourceStore {
   static Future<void> saveLoggedIn(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kLoggedIn, value);
+  }
+
+  // ---- 收藏 / 稍后看 ----
+  static Future<List<String>> loadFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_kFavorites);
+    if (raw == null) return const [];
+    try {
+      final list = json.decode(raw) as List;
+      return list.whereType<String>().toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// 切换收藏状态，返回切换后是否处于收藏状态。
+  static Future<bool> toggleFavorite(String id) async {
+    final favs = await loadFavorites();
+    final set = favs.toSet();
+    final added = !set.contains(id);
+    if (added) {
+      set.add(id);
+    } else {
+      set.remove(id);
+    }
+    await saveFavorites(set.toList());
+    return added;
+  }
+
+  static Future<void> saveFavorites(List<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kFavorites, json.encode(ids));
+  }
+
+  // ---- 观看历史 / 续播 ----
+  static Future<List<Map<String, dynamic>>> loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_kHistory);
+    if (raw == null) return const [];
+    try {
+      final list = json.decode(raw) as List;
+      return list.whereType<Map<String, dynamic>>().toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<void> saveHistory(List<Map<String, dynamic>> records) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kHistory, json.encode(records));
+  }
+
+  /// 记录/更新一条观看进度（按 id 去重，最近观看置顶，最多保留 50 条）。
+  static Future<void> recordWatch({
+    required String id,
+    required String title,
+    String? posterUrl,
+    required List<String> videoSources,
+    required int positionMs,
+    required int durationMs,
+  }) async {
+    final list = await loadHistory();
+    list.removeWhere((r) => r['id'] == id);
+    list.insert(0, {
+      'id': id,
+      'title': title,
+      'posterUrl': posterUrl,
+      'videoSources': videoSources,
+      'positionMs': positionMs,
+      'durationMs': durationMs,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+    if (list.length > 50) list.removeRange(50, list.length);
+    await saveHistory(list);
   }
 
   static Future<List<MediaItem>> loadCollectedItems() async {
