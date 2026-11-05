@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../data/source_store.dart';
 import '../models/media.dart';
+import 'http_util.dart';
 
 /// Adapter for user-owned or authorized CMS-style video APIs.
 ///
@@ -16,7 +16,8 @@ class CmsService {
     if (endpoint.isEmpty) return const [];
 
     final uri = _catalogUri(endpoint, source.type, page);
-    final res = await http.get(uri).timeout(const Duration(seconds: _timeoutSeconds));
+    final res =
+        await HttpUtil.get(uri, timeout: const Duration(seconds: _timeoutSeconds));
     if (res.statusCode != 200) {
       throw Exception('${source.name} HTTP ${res.statusCode}');
     }
@@ -129,11 +130,14 @@ class CmsService {
 
   bool _isPlayable(String url) {
     final lower = url.toLowerCase();
-    return (lower.startsWith('http://') || lower.startsWith('https://')) &&
-        (lower.contains('.m3u8') ||
-            lower.contains('.mp4') ||
-            lower.contains('.webm') ||
-            lower.contains('.mov'));
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) return false;
+    return lower.contains('.m3u8') ||
+        lower.contains('.mp4') ||
+        lower.contains('.webm') ||
+        lower.contains('.mov') ||
+        lower.contains('.flv') ||
+        lower.contains('.mkv') ||
+        lower.contains('.ts');
   }
 
   String _categoryFrom(String typeName) {

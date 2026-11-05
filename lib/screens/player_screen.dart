@@ -42,8 +42,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _episode = widget.initialEpisode;
-    // 连续剧：选集索引即对应 videoSources 的条目；单部电影：线路从 0 开始。
-    _sourceIndex = widget.episodes.isEmpty ? 0 : widget.initialEpisode;
+    // 单部电影：线路从 0 开始；连续剧：选集索引对可用源数取模，避免越界
+    //（演示数据源数 < 集数时循环复用，而非全部回落到最后一集）。
+    _sourceIndex = widget.episodes.isEmpty || widget.videoSources.isEmpty
+        ? 0
+        : widget.initialEpisode % widget.videoSources.length;
     _createController();
   }
 
@@ -86,8 +89,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controller?.dispose();
     setState(() {
       _episode = i;
-      // 选集直接映射到 videoSources 中对应条目。
-      _sourceIndex = widget.episodes.isEmpty ? 0 : i;
+      // 选集对可用源数取模，源数不足时循环复用，避免越界只播最后一集。
+      _sourceIndex = widget.episodes.isEmpty || widget.videoSources.isEmpty
+          ? 0
+          : i % widget.videoSources.length;
       _drawerOpen = false;
       _showControls = true;
       _createController();

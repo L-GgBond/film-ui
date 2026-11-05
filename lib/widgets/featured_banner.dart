@@ -106,8 +106,8 @@ class FeaturedBanner extends StatelessWidget {
                                   (it.overview != null && it.overview!.isNotEmpty
                                       ? ' · ${it.overview!.length > 22 ? it.overview!.substring(0, 22) : it.overview!}'
                                       : ''),
-                              style: const TextStyle(
-                                  color: Color(0xFFD8DBE0), fontSize: 12),
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 12),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),

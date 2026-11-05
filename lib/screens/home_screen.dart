@@ -142,10 +142,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String get _modeLabel {
     switch (_mode) {
-      case 'tmdb':
-        return 'TMDB 实时';
-      case 'archive':
-        return '公共领域影视库';
       case 'collected':
         return '真实采集';
       case 'cache':
@@ -178,7 +174,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return _items.where((item) {
       final matchCat = catKey == null || item.category == catKey;
       final matchSource = _matchesSource(item);
-      final matchQuery = _query.isEmpty || item.title.contains(_query);
+      final q = _query.toLowerCase();
+      final matchQuery = _query.isEmpty ||
+          item.title.toLowerCase().contains(q) ||
+          (item.overview?.toLowerCase().contains(q) ?? false);
       return matchCat && matchSource && matchQuery;
     }).toList();
   }

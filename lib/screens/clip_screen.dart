@@ -29,13 +29,17 @@ class ClipScreen extends StatelessWidget {
         backgroundColor: AppTheme.background,
         foregroundColor: AppTheme.textPrimary,
       ),
-      body: GridView.count(
-        crossAxisCount: 3,
-        padding: const EdgeInsets.all(12),
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 9 / 16,
-        children: _clips.asMap().entries.map((e) {
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final crossAxisCount =
+              (constraints.maxWidth / 200).floor().clamp(2, 6);
+          return GridView.count(
+            crossAxisCount: crossAxisCount,
+            padding: const EdgeInsets.all(12),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 9 / 16,
+            children: _clips.asMap().entries.map((e) {
           final c = e.value;
           final poster = MockData.posterPool[e.key % MockData.posterPool.length];
           return GestureDetector(
@@ -88,6 +92,8 @@ class ClipScreen extends StatelessWidget {
             ),
           );
         }).toList(),
+      );
+        },
       ),
     );
   }

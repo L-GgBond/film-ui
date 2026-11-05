@@ -341,27 +341,32 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
             const SizedBox(height: 14),
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.surfaceAlt),
-                ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('用户')),
-                      DataColumn(label: Text('角色')),
-                      DataColumn(label: Text('状态')),
-                      DataColumn(label: Text('最近活跃')),
-                      DataColumn(label: Text('注册时间')),
-                      DataColumn(label: Text('操作'), numeric: true),
-                    ],
-                    rows: list.map((u) => _userRow(u)).toList(),
-                  ),
-                ),
-              ),
+              child: list.isEmpty
+                  ? Center(
+                      child: Text('无匹配用户',
+                          style: TextStyle(color: AppTheme.textSecondary)),
+                    )
+                  : Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.surfaceAlt),
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
+                          columns: const [
+                            DataColumn(label: Text('用户')),
+                            DataColumn(label: Text('角色')),
+                            DataColumn(label: Text('状态')),
+                            DataColumn(label: Text('最近活跃')),
+                            DataColumn(label: Text('注册时间')),
+                            DataColumn(label: Text('操作'), numeric: true),
+                          ],
+                          rows: list.map((u) => _userRow(u)).toList(),
+                        ),
+                      ),
+                    ),
             ),
           ],
         ),

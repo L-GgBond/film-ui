@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../models/media.dart';
+import 'http_util.dart';
 
 /// TMDB (The Movie Database) public API client.
 ///
@@ -21,7 +21,7 @@ class TmdbService {
     final uri = Uri.parse(
       '$_base/trending/all/week?api_key=$apiKey&language=zh-CN',
     );
-    final res = await http.get(uri).timeout(const Duration(seconds: 8));
+    final res = await HttpUtil.get(uri);
     if (res.statusCode != 200) {
       throw Exception('TMDB HTTP ${res.statusCode}');
     }

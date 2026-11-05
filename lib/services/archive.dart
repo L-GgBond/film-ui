@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../models/media.dart';
+import 'http_util.dart';
 
 /// Internet Archive public-domain / CC film library client.
 ///
@@ -23,7 +23,7 @@ class ArchiveService {
       '&fl[]=identifier&fl[]=title&fl[]=year&fl[]=description&fl[]=downloads'
       '&rows=$rows&output=json&sort[]=downloads+desc',
     );
-    final res = await http.get(searchUrl).timeout(const Duration(seconds: 8));
+    final res = await HttpUtil.get(searchUrl);
     if (res.statusCode != 200) {
       throw Exception('archive.org HTTP ${res.statusCode}');
     }
@@ -41,8 +41,8 @@ class ArchiveService {
     final id = doc['identifier'] as String? ?? '';
     if (id.isEmpty) return null;
     try {
-      final mdRes = await http.get(Uri.parse('$_metadataBase$id'))
-          .timeout(const Duration(seconds: 6));
+      final mdRes = await HttpUtil.get(Uri.parse('$_metadataBase$id'),
+          timeout: const Duration(seconds: 6));
       if (mdRes.statusCode != 200) return null;
       final md = json.decode(utf8.decode(mdRes.bodyBytes)) as Map<String, dynamic>;
       final files = (md['files'] as List?) ?? [];
