@@ -24,8 +24,8 @@ class MediaCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AspectRatio(
-              aspectRatio: 2 / 3,
+            // 用 Expanded 占满网格单元剩余高度，避免固定 2:3 海报 + 文字导致纵向溢出。
+            Expanded(
               child: poster != null
                   ? Image.network(
                       poster,

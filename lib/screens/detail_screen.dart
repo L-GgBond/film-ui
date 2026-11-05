@@ -215,7 +215,7 @@ class DetailScreen extends StatelessWidget {
                   final rec = _related[i];
                   final poster = rec.posterUrl;
                   return GestureDetector(
-                    onTap: () => Navigator.of(context).push(
+                    onTap: () => Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
                         builder: (_) => DetailScreen(item: rec, items: items),
                       ),

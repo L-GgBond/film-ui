@@ -73,6 +73,7 @@ class SourceStore {
   static const String _kItems = 'vh_collected_items';
   static const String _kItemsAt = 'vh_collected_items_at';
   static const String _kAutoCollect = 'vh_auto_collect';
+  static const String _kLoggedIn = 'vh_logged_in';
   static const Map<String, String> _legacyNames = {
     '量子资源': 'Sintel 预告片',
     '非凡资源': 'Big Buck Bunny 样片',
@@ -186,6 +187,16 @@ class SourceStore {
   static Future<void> saveAutoCollect(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kAutoCollect, value);
+  }
+
+  static Future<bool> loadLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kLoggedIn) ?? false;
+  }
+
+  static Future<void> saveLoggedIn(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kLoggedIn, value);
   }
 
   static Future<List<MediaItem>> loadCollectedItems() async {

@@ -19,6 +19,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<MediaSourceCfg> _sources = [];
   bool _autoCollect = true;
 
+  // 每个字段维护独立控制器，避免在 build() 内反复新建导致泄漏与光标跳动。
+  final Map<int, TextEditingController> _nameC = {};
+  final Map<int, TextEditingController> _endpointC = {};
+  final Map<int, TextEditingController> _parseC = {};
+  final Map<int, TextEditingController> _groupC = {};
+  final Map<int, TextEditingController> _catC = {};
+  final Map<String, TextEditingController> _urlC = {};
+
+  TextEditingController _ctl(
+          Map<int, TextEditingController> map, int i, String initial) =>
+      map.putIfAbsent(i, () => TextEditingController(text: initial));
+
+  TextEditingController _urlCtl(int i, int j, String initial) =>
+      _urlC.putIfAbsent('$i:$j', () => TextEditingController(text: initial));
+
+  void _disposeSourceControllers() {
+    for (final c in _nameC.values) c.dispose();
+    _nameC.clear();
+    for (final c in _endpointC.values) c.dispose();
+    _endpointC.clear();
+    for (final c in _parseC.values) c.dispose();
+    _parseC.clear();
+    for (final c in _groupC.values) c.dispose();
+    _groupC.clear();
+    for (final c in _catC.values) c.dispose();
+    _catC.clear();
+    for (final c in _urlC.values) c.dispose();
+    _urlC.clear();
+  }
+
   static const List<Map<String, String>> _types = [
     {'value': 'raw', 'label': '直链源'},
     {'value': 'cms-xml', 'label': 'cms[xml]'},
@@ -43,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _keyController.dispose();
+    _disposeSourceControllers();
     super.dispose();
   }
 
@@ -66,10 +97,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) Navigator.of(context).pop(true);
   }
 
-  void _addSource() => setState(() => _sources.add(MediaSourceCfg(name: '新资源源', urls: [''])));
-  void _delSource(int i) => setState(() => _sources.removeAt(i));
+  void _addSource() =>
+      setState(() => _sources.add(MediaSourceCfg(name: '新资源源', urls: [''])));
+  void _delSource(int i) {
+    _disposeSourceControllers();
+    setState(() => _sources.removeAt(i));
+  }
+
   void _addUrl(int i) => setState(() => _sources[i].urls.add(''));
-  void _delUrl(int i, int j) => setState(() => _sources[i].urls.removeAt(j));
+  void _delUrl(int i, int j) {
+    _disposeSourceControllers();
+    setState(() => _sources[i].urls.removeAt(j));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Expanded(
                           child: TextField(
-                            controller: TextEditingController(text: s.name),
+                            controller: _ctl(_nameC, i, s.name),
                             onChanged: (v) => s.name = v,
                             decoration: const InputDecoration(labelText: '* 名称'),
                           ),
@@ -155,7 +194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }).toList(),
                     ),
                     TextField(
-                      controller: TextEditingController(text: s.endpoint),
+                      controller: _ctl(_endpointC, i, s.endpoint),
                       onChanged: (v) => s.endpoint = v,
                       decoration: const InputDecoration(
                         labelText: '接口',
@@ -181,7 +220,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }).toList(),
                     ),
                     TextField(
-                      controller: TextEditingController(text: s.parseUrl),
+                      controller: _ctl(_parseC, i, s.parseUrl),
                       onChanged: (v) => s.parseUrl = v,
                       decoration: const InputDecoration(labelText: '解析'),
                     ),
@@ -189,7 +228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Expanded(
                           child: TextField(
-                            controller: TextEditingController(text: s.group),
+                            controller: _ctl(_groupC, i, s.group),
                             onChanged: (v) => s.group = v,
                             decoration: const InputDecoration(labelText: '分组'),
                           ),
@@ -197,7 +236,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: TextField(
-                            controller: TextEditingController(text: s.categories),
+                            controller: _ctl(_catC, i, s.categories),
                             onChanged: (v) => s.categories = v,
                             decoration: const InputDecoration(
                               labelText: '类别',
@@ -216,7 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           Expanded(
                             child: TextField(
-                              controller: TextEditingController(text: s.urls[j]),
+                              controller: _urlCtl(i, j, s.urls[j]),
                               onChanged: (v) => s.urls[j] = v,
                               decoration: const InputDecoration(
                                 labelText: '视频直链 URL (mp4/m3u8)',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import '../data/mock_data.dart';
 import '../data/source_store.dart';
 import '../models/media.dart';
@@ -50,43 +51,32 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  /// Build the multi-line playback source list from user-configured raw links,
-  /// then append the public/open-licensed fallback streams.
-  static List<String> _buildSources(List<MediaSourceCfg> srcs) {
-    final urls = <String>[];
-    for (final s in srcs) {
-      for (final u in s.urls) {
-        if (u.trim().isNotEmpty && !urls.contains(u)) urls.add(u.trim());
-      }
-    }
-    for (final u in MockData.sourcePool) {
-      if (!urls.contains(u)) urls.add(u);
-    }
-    return urls.isEmpty ? MockData.sourcePool.toList() : urls;
-  }
-
   Future<void> _load() async {
-    final srcs = await SourceStore.loadSources();
     final autoCollect = await SourceStore.loadAutoCollect();
     final cached = await SourceStore.loadCollectedItems();
     final cachedAt = await SourceStore.loadCollectedAt();
-    final playSources = _buildSources(srcs);
+    final loggedIn = await SourceStore.loadLoggedIn();
 
     if (mounted) {
       setState(() {
-        _items = cached.isNotEmpty ? cached : _demoItems(playSources);
+        _items = cached.isNotEmpty ? cached : _demoItems();
         _mode = cached.isNotEmpty ? 'cache' : 'demo';
         _collectedAt = cachedAt;
+        _loggedIn = loggedIn;
         _loading = false;
       });
     }
 
-    if (autoCollect) {
+    // 采集缓存 6 小时内视为新鲜，避免每次冷启动都打 24+ 个网络请求。
+    if (autoCollect &&
+        (cachedAt == null ||
+            DateTime.now().difference(cachedAt) >
+                const Duration(hours: 6))) {
       await _collectResources(silent: true);
     }
   }
 
-  List<MediaItem> _demoItems(List<String> playSources) {
+  List<MediaItem> _demoItems() {
     return MockData.items
         .map((e) => MediaItem(
               id: e.id,
@@ -95,7 +85,8 @@ class _HomeScreenState extends State<HomeScreen> {
               status: e.status,
               coverColor: e.coverColor,
               source: e.source,
-              videoSources: playSources,
+              videoSources:
+                  e.videoSources.isNotEmpty ? e.videoSources : MockData.sourcePool,
               posterUrl: e.posterUrl,
               overview: e.overview,
             ))
@@ -259,6 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (ok == true && mounted) {
       setState(() => _loggedIn = true);
+      await SourceStore.saveLoggedIn(true);
       if (_activeNav == 'admin') {
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const AdminScreen()),
@@ -272,6 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _loggedIn = false;
       if (_activeNav == 'admin') _activeNav = 'movie';
     });
+    SourceStore.saveLoggedIn(false);
   }
 
   void _openPlayer(MediaItem item) {
@@ -346,9 +339,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             : const Icon(Icons.sync, size: 20),
                       ),
                       const SizedBox(width: 8),
-                      TopSearchBar(
-                        controller: _searchController,
-                        onChanged: (v) => setState(() => _query = v),
+                      Flexible(
+                        child: TopSearchBar(
+                          controller: _searchController,
+                          onChanged: (v) => setState(() => _query = v),
+                        ),
                       ),
                     ],
                   ),
@@ -357,22 +352,36 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
-                      : SingleChildScrollView(
-                          child: Column(
-                            children: [
-                              FeaturedBanner(
-                                items: _items,
-                                onTap: _openPlayer,
+                      : _filtered.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.search_off,
+                                      size: 48, color: AppTheme.textSecondary),
+                                  const SizedBox(height: 12),
+                                  Text('未找到匹配的影片',
+                                      style:
+                                          TextStyle(color: AppTheme.textSecondary)),
+                                ],
                               ),
-                              MediaGrid(
-                                items: _filtered,
-                                onTap: _openPlayer,
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
+                            )
+                          : SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  FeaturedBanner(
+                                    items: _items,
+                                    onTap: _openPlayer,
+                                  ),
+                                  MediaGrid(
+                                    items: _filtered,
+                                    onTap: _openPlayer,
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
                 ),
               ],
             ),

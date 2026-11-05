@@ -28,6 +28,12 @@ class _ParseScreenState extends State<ParseScreen> {
     if (mounted) setState(() => _sources = s);
   }
 
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
   void _build() {
     if (_sources.isEmpty) {
       setState(() => _result = '尚未配置任何资源源，请先到设置中添加。');

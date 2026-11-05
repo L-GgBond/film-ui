@@ -31,12 +31,13 @@ class AppSidebar extends StatelessWidget {
     return Container(
       width: collapsed ? 64 : 210,
       color: AppTheme.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Logo
-          Container(
-            height: 56,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Logo
+            Container(
+              height: 56,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             alignment: Alignment.centerLeft,
             child: Row(
@@ -88,8 +89,8 @@ class AppSidebar extends StatelessWidget {
             ),
           // Source list
           ...MockData.sources.map((src) => _sourceTile(src)),
-          const Spacer(),
         ],
+      ),
       ),
     );
   }

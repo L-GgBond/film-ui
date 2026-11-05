@@ -15,27 +15,30 @@ class CategoryTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: MockData.categories.map((cat) {
-        final active = cat == activeCategory;
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: TextButton(
-            style: TextButton.styleFrom(
-              backgroundColor:
-                  active ? AppTheme.accent.withOpacity(0.16) : Colors.transparent,
-              foregroundColor:
-                  active ? AppTheme.accent : AppTheme.textSecondary,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: MockData.categories.map((cat) {
+          final active = cat == activeCategory;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor:
+                    active ? AppTheme.accent.withOpacity(0.16) : Colors.transparent,
+                foregroundColor:
+                    active ? AppTheme.accent : AppTheme.textSecondary,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
+              onPressed: () => onCategoryChanged(cat),
+              child: Text(cat, style: const TextStyle(fontSize: 14)),
             ),
-            onPressed: () => onCategoryChanged(cat),
-            child: Text(cat, style: const TextStyle(fontSize: 14)),
-          ),
-        );
-      }).toList(),
+          );
+        }).toList(),
+      ),
     );
   }
 }

@@ -22,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _submit() {
     if (_loading) return;
+    if (!_formKey.currentState!.validate()) return;
     final u = _userCtrl.text.trim();
     final p = _passCtrl.text;
     // 模拟登录校验（UI 原型，无真实后端）
@@ -101,6 +102,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _userCtrl,
                   decoration: const InputDecoration(labelText: '用户名'),
                   textInputAction: TextInputAction.next,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? '请输入用户名' : null,
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
@@ -108,6 +111,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: const InputDecoration(labelText: '密码'),
                   obscureText: true,
                   onFieldSubmitted: (_) => _submit(),
+                  validator: (v) =>
+                      v == null || v.isEmpty ? '请输入密码' : null,
                 ),
                 const SizedBox(height: 8),
                 if (_error != null)

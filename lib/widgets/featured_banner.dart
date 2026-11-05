@@ -14,6 +14,8 @@ class FeaturedBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final featured = items.take(6).toList();
     if (featured.isEmpty) return const SizedBox.shrink();
+    final screenW = MediaQuery.of(context).size.width;
+    final cardW = screenW < 520 ? screenW - 32 : 320.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -35,7 +37,7 @@ class FeaturedBanner extends StatelessWidget {
               return GestureDetector(
                 onTap: () => onTap(it),
                 child: Container(
-                  width: 320,
+                  width: cardW,
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),

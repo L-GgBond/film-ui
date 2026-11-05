@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../theme/app_theme.dart';
@@ -26,13 +27,14 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   late Future<void> _initFuture;
   int _sourceIndex = 0;
   bool _showControls = true;
   bool _drawerOpen = false;
   int _episode = 0;
   double _speed = 1.0;
+  Timer? _hideTimer;
 
   static const List<double> _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
@@ -40,24 +42,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _episode = widget.initialEpisode;
+    // 连续剧：选集索引即对应 videoSources 的条目；单部电影：线路从 0 开始。
+    _sourceIndex = widget.episodes.isEmpty ? 0 : widget.initialEpisode;
     _createController();
   }
 
   void _createController() {
-    _controller = VideoPlayerController.networkUrl(
-      Uri.parse(widget.videoSources[_sourceIndex]),
-    );
-    _initFuture = _controller.initialize().then((_) {
+    _hideTimer?.cancel();
+    if (widget.videoSources.isEmpty) {
+      _controller = null;
+      _initFuture = Future.error('暂无可用播放地址');
+      return;
+    }
+    final index = _sourceIndex.clamp(0, widget.videoSources.length - 1);
+    final controller =
+        VideoPlayerController.networkUrl(Uri.parse(widget.videoSources[index]));
+    _controller = controller;
+    _initFuture = controller.initialize().then((_) {
+      // 用局部变量，避免切换线路时旧回调错误操作新控制器。
       if (mounted) {
-        _controller.setPlaybackSpeed(_speed);
-        _controller.play();
+        controller.setPlaybackSpeed(_speed);
+        controller.play();
+        _scheduleHide();
       }
+    }).catchError((_) {
+      // 初始化失败由 FutureBuilder 的 snapshot.hasError 统一展示。
     });
   }
 
   void _switchSource(int i) {
-    if (i == _sourceIndex) return;
-    _controller.dispose();
+    if (i < 0 || i >= widget.videoSources.length || i == _sourceIndex) return;
+    _controller?.dispose();
     setState(() {
       _sourceIndex = i;
       _showControls = true;
@@ -66,9 +81,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _selectEpisode(int i) {
+    if (i < 0 || i >= widget.episodes.length) return;
+    if (i == _episode && widget.episodes.isNotEmpty) return;
+    _controller?.dispose();
     setState(() {
       _episode = i;
-      _sourceIndex = 0;
+      // 选集直接映射到 videoSources 中对应条目。
+      _sourceIndex = widget.episodes.isEmpty ? 0 : i;
       _drawerOpen = false;
       _showControls = true;
       _createController();
@@ -76,16 +95,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _togglePlay() {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
     setState(() {
-      _controller.value.isPlaying ? _controller.pause() : _controller.play();
+      c.value.isPlaying ? c.pause() : c.play();
+      _showControls = true;
     });
+    _scheduleHide();
+  }
+
+  void _toggleControls() {
+    setState(() => _showControls = !_showControls);
+    _scheduleHide();
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    final c = _controller;
+    if (_showControls && c != null && c.value.isInitialized && c.value.isPlaying) {
+      _hideTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _showControls = false);
+      });
+    }
   }
 
   void _setSpeed(double v) {
-    setState(() {
-      _speed = v;
-      if (_controller.value.isInitialized) _controller.setPlaybackSpeed(v);
-    });
+    final c = _controller;
+    setState(() => _speed = v);
+    if (c != null && c.value.isInitialized) c.setPlaybackSpeed(v);
   }
 
   String get _fullTitle =>
@@ -93,14 +130,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _hideTimer?.cancel();
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLast = _sourceIndex >= widget.videoSources.length - 1;
     final hasEp = widget.episodes.isNotEmpty;
+    final isLast = _sourceIndex >= widget.videoSources.length - 1;
     final isLastEp = _episode >= widget.episodes.length - 1;
     return Scaffold(
       backgroundColor: Colors.black,
@@ -114,7 +152,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 if (snapshot.connectionState != ConnectionState.done) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (snapshot.hasError) {
+                if (snapshot.hasError || _controller == null) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -141,10 +179,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   );
                 }
-                return Center(
-                  child: AspectRatio(
-                    aspectRatio: _controller.value.aspectRatio,
-                    child: VideoPlayer(_controller),
+                return GestureDetector(
+                  onTap: _toggleControls,
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: _controller!.value.aspectRatio,
+                      child: VideoPlayer(_controller!),
+                    ),
                   ),
                 );
               },
@@ -176,26 +217,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           style: const TextStyle(color: Colors.white),
                           overflow: TextOverflow.ellipsis),
                     ),
-                    PopupMenuButton<int>(
-                      onSelected: _switchSource,
-                      itemBuilder: (ctx) => List.generate(widget.videoSources.length, (i) =>
-                        PopupMenuItem(
-                          value: i,
-                          child: Text('线路 ${i + 1}${i == _sourceIndex ? ' ✓' : ''}'),
-                        )),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('线路 ${_sourceIndex + 1}/${widget.videoSources.length}',
-                            style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    // 单部电影：切换播放线路；连续剧：选集即在抽屉内切换。
+                    if (!hasEp)
+                      PopupMenuButton<int>(
+                        onSelected: _switchSource,
+                        itemBuilder: (ctx) => List.generate(
+                            widget.videoSources.length,
+                            (i) => PopupMenuItem(
+                                  value: i,
+                                  child: Text(
+                                      '线路 ${i + 1}${i == _sourceIndex ? ' ✓' : ''}'),
+                                )),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text('线路 ${_sourceIndex + 1}/${widget.videoSources.length}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        ),
                       ),
-                    ),
                     PopupMenuButton<double>(
                       onSelected: _setSpeed,
-                      itemBuilder: (ctx) => _speeds.map((s) =>
-                        PopupMenuItem(
-                          value: s,
-                          child: Text('${s == 1.0 ? '1.0' : s}x${s == _speed ? ' ✓' : ''}'),
-                        )).toList(),
+                      itemBuilder: (ctx) => _speeds
+                          .map((s) => PopupMenuItem(
+                                value: s,
+                                child: Text(
+                                    '${s == 1.0 ? '1.0' : s}x${s == _speed ? ' ✓' : ''}'),
+                              ))
+                          .toList(),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Text('${_speed == 1.0 ? '1.0' : _speed}x',
@@ -230,7 +277,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    _controller.value.isInitialized && _controller.value.isPlaying
+                    _controller != null &&
+                            _controller!.value.isInitialized &&
+                            _controller!.value.isPlaying
                         ? Icons.pause
                         : Icons.play_arrow,
                     color: Colors.white,
@@ -254,9 +303,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                 ),
                 padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-                child: _controller.value.isInitialized
+                child: _controller != null && _controller!.value.isInitialized
                     ? VideoProgressIndicator(
-                        _controller,
+                        _controller!,
                         allowScrubbing: true,
                         colors: VideoProgressColors(
                           playedColor: AppTheme.accent,
@@ -286,7 +335,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('选集', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                          const Text('选集',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600)),
                           IconButton(
                             icon: const Icon(Icons.close, color: Colors.white70),
                             onPressed: () => setState(() => _drawerOpen = false),
@@ -307,11 +360,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           return ElevatedButton(
                             onPressed: () => _selectEpisode(i),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: active ? AppTheme.accent : const Color(0xFF262a33),
+                              backgroundColor:
+                                  active ? AppTheme.accent : const Color(0xFF262a33),
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
                             ),
-                            child: Text(label.replaceFirst('第 ', '').replaceFirst(' 集', ''),
+                            child: Text(
+                                label.replaceFirst('第 ', '').replaceFirst(' 集', ''),
                                 style: const TextStyle(fontSize: 13)),
                           );
                         }).toList(),

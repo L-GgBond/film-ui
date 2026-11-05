@@ -82,7 +82,8 @@ class _AdminScreenState extends State<AdminScreen> {
 
   int get _activeCount => _users.where((u) => u.status == UserStatus.active).length;
   int get _disabledCount => _users.where((u) => u.status == UserStatus.disabled).length;
-  int get _todayCount => _users.where((u) => u.lastActive.startsWith('2026-08-16')).length;
+  String get _todayStr => DateTime.now().toString().substring(0, 10);
+  int get _todayCount => _users.where((u) => u.lastActive.startsWith(_todayStr)).length;
 
   Color _avatarColor(String name) {
     final palette = [
@@ -240,6 +241,12 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
         ),
       );
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
